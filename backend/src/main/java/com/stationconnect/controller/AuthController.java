@@ -27,4 +27,5 @@ public class AuthController {
     public ApiResponse<LoginResponse> login(@Valid @RequestBody LoginRequest req) {
         return ApiResponse.ok("Login successful", authService.login(req));
     }
+    
 }

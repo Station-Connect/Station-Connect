@@ -1,12 +1,26 @@
+
 package com.stationconnect.dto;
 
-import com.stationconnect.entity.Role;
-import jakarta.validation.constraints.*;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 public record RegisterRequest(
-        @NotBlank @Size(max = 100) String fullName,
-        @NotBlank @Email String email,
-        @Pattern(regexp = "^[0-9]{10}$", message = "must be 10 digits") String phone,
-        @NotBlank @Size(min = 8, message = "must be at least 8 characters") String password,
-        @NotNull Role role) {
-}
+
+    @NotBlank(message = "Full name is required")
+    @Size(max = 100)
+    String fullName,
+
+    @NotBlank(message = "Email is required")
+    @Email(message = "Enter a valid email address")
+    @Size(max = 254)
+    String email,
+
+    @Size(max = 20)
+    String phone,
+
+    @NotBlank(message = "Password is required")
+    @Size(min = 8, max = 72)
+    String password
+
+) {}
