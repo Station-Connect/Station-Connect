@@ -4,22 +4,21 @@ package com.stationconnect.config;
 import com.stationconnect.security.JwtAuthenticationFilter;
 import com.stationconnect.security.JwtUtil;
 
+import java.util.List;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
-
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.AuthenticationEntryPoint;
+import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
-
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-import java.util.List;
 
 @Configuration
 public class SecurityConfig {
@@ -59,7 +58,12 @@ public class SecurityConfig {
                 .accessDeniedHandler(forbidden)
             )
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
+                // Allow browser preflight requests
+                .requestMatchers(HttpMethod.OPTIONS, "/**")
+                    .permitAll()
+
+                // Public endpoints
                 .requestMatchers("/error").permitAll()
                 .requestMatchers(
                     HttpMethod.POST,
@@ -67,9 +71,20 @@ public class SecurityConfig {
                     "/api/auth/login"
                 ).permitAll()
                 .requestMatchers("/api/health").permitAll()
-                .requestMatchers("/api/admin/**").hasRole("ADMIN")
+
+                // Admin endpoints
+                .requestMatchers("/api/admin/**")
+                    .hasRole("ADMIN")
+
+                // Driver endpoints
                 .requestMatchers("/api/driver/**")
                     .hasAnyRole("DRIVER", "ADMIN")
+
+                // Rider endpoints
+                .requestMatchers("/api/rider/**")
+                    .hasAnyRole("RIDER", "ADMIN")
+
+                // All other endpoints require authentication
                 .anyRequest().authenticated()
             )
             .addFilterBefore(
@@ -79,23 +94,42 @@ public class SecurityConfig {
 
         return http.build();
     }
-    
-@Bean
-public CorsConfigurationSource corsConfigurationSource() {
-    CorsConfiguration config = new CorsConfiguration();
 
-    config.setAllowedOrigins(List.of("http://localhost:4200"));
-    config.setAllowedMethods(
-            List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-    config.setAllowedHeaders(
-            List.of("Authorization", "Content-Type", "Accept"));
-    config.setAllowCredentials(false);
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
 
-    UrlBasedCorsConfigurationSource source =
-            new UrlBasedCorsConfigurationSource();
-    source.registerCorsConfiguration("/**", config);
+        CorsConfiguration config = new CorsConfiguration();
 
-    return source;
-}
+        config.setAllowedOrigins(
+                List.of("http://localhost:4200")
+        );
 
+        config.setAllowedMethods(
+                List.of(
+                    "GET",
+                    "POST",
+                    "PUT",
+                    "PATCH",
+                    "DELETE",
+                    "OPTIONS"
+                )
+        );
+
+        config.setAllowedHeaders(
+                List.of(
+                    "Authorization",
+                    "Content-Type",
+                    "Accept"
+                )
+        );
+
+        config.setAllowCredentials(false);
+
+        UrlBasedCorsConfigurationSource source =
+                new UrlBasedCorsConfigurationSource();
+
+        source.registerCorsConfiguration("/**", config);
+
+        return source;
+    }
 }
