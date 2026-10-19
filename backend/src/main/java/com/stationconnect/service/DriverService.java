@@ -11,6 +11,8 @@ import org.springframework.transaction.annotation.Transactional;
 import com.stationconnect.entity.DriverLocation;
 import com.stationconnect.repository.DriverLocationRepository;
 import java.time.OffsetDateTime;
+import com.stationconnect.dto.DriverProfileRequest;
+import com.stationconnect.entity.Role;
 
 @Service
 public class DriverService {
@@ -130,6 +132,43 @@ public DriverProfile updateOnlineStatus(String email, boolean online) {
     }
 
     profile.setOnline(online);
+    return driverProfileRepository.save(profile);
+}
+
+@Transactional
+public DriverProfile createProfile(String email, DriverProfileRequest request) {
+    var user = userRepository.findByEmail(
+            email.trim().toLowerCase(java.util.Locale.ROOT))
+            .orElseThrow(() -> new ApiException(
+                    HttpStatus.NOT_FOUND, "User not found"));
+
+    if (user.getRole() != Role.DRIVER) {
+        throw new ApiException(
+                HttpStatus.FORBIDDEN,
+                "Only drivers can create a driver profile");
+    }
+
+    if (driverProfileRepository.existsById(user.getId())) {
+        throw new ApiException(
+                HttpStatus.CONFLICT,
+                "Driver profile already exists");
+    }
+
+    DriverProfile profile = new DriverProfile();
+    profile.setUserId(user.getId());
+    profile.setVehicleType(request.vehicleType().trim());
+    profile.setVehicleNumber(
+            request.vehicleNumber().trim().toUpperCase(java.util.Locale.ROOT));
+
+    if (request.documentUrl() != null
+            && !request.documentUrl().isBlank()) {
+        profile.setDocumentUrl(request.documentUrl().trim());
+    }
+
+    profile.setVerificationStatus(
+            DriverProfile.VerificationStatus.PENDING);
+    profile.setOnline(false);
+
     return driverProfileRepository.save(profile);
 }
 

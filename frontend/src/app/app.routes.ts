@@ -3,57 +3,64 @@ import { Routes } from '@angular/router';
 import { Login } from './core/auth/login/login';
 import { Register } from './core/auth/register/register';
 import { Placeholder } from './shared/placeholder/placeholder';
-import { RiderDashboard } from './rider/rider-dashboard';
+import { authGuard, roleGuard } from './core/auth/auth.guard';
 
-// Authentication Guard
-import { authGuard } from './core/auth/auth.guard';
+import { RiderDashboard } from './rider/rider-dashboard';
+import { DriverDashboard } from './driver/dashboard/driver-dashboard';
+import { Registration } from './driver/registration/registration';
 
 export const routes: Routes = [
-
-  // Default Route
   {
     path: '',
     pathMatch: 'full',
-    redirectTo: 'login'
+    redirectTo: 'login',
   },
 
-  // Public Routes
+  // Public routes
   {
     path: 'login',
-    component: Login
+    component: Login,
   },
   {
     path: 'register',
-    component: Register
+    component: Register,
   },
 
-  // Protected Rider Dashboard
+  // Rider dashboard
   {
     path: 'rider',
     component: RiderDashboard,
-    canActivate: [authGuard]
+    canActivate: [authGuard, roleGuard],
+    data: { roles: ['RIDER'] },
   },
 
-  // Protected Driver Dashboard
+  // Driver dashboard
   {
     path: 'driver',
-    component: Placeholder,
-    canActivate: [authGuard],
-    data: { title: 'Driver' }
+    component: DriverDashboard,
+    canActivate: [authGuard, roleGuard],
+    data: { roles: ['DRIVER'] },
   },
 
-  // Protected Admin Dashboard
+  // Driver registration
+  {
+    path: 'driver/register',
+    component: Registration,
+    canActivate: [authGuard, roleGuard],
+    data: { roles: ['DRIVER'] },
+  },
+
+  // Admin dashboard (placeholder for now)
   {
     path: 'admin',
     component: Placeholder,
-    canActivate: [authGuard],
-    data: { title: 'Admin' }
+    canActivate: [authGuard, roleGuard],
+    data: { title: 'Admin', roles: ['ADMIN'] },
   },
 
-  // Invalid Routes
+  // Invalid routes
   {
     path: '**',
-    redirectTo: 'login'
-  }
-
+    redirectTo: 'login',
+  },
 ];

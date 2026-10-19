@@ -8,11 +8,12 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const authService = inject(AuthService);
   const token = authService.token();
 
+  // Attach the JWT only to Station Connect API requests.
   if (token && req.url.startsWith(`${environment.apiUrl}/`)) {
     req = req.clone({
       setHeaders: {
-        Authorization: `Bearer ${token}`
-      }
+        Authorization: `Bearer ${token}`,
+      },
     });
   }
 

@@ -1,0 +1,53 @@
+<main class="registration">
+  <h1>Driver Registration</h1>
+  <p>Enter your vehicle details to create your driver profile.</p>
+
+  <form (ngSubmit)="submitForm()" #registrationForm="ngForm">
+    <label for="vehicleType">Vehicle type</label>
+    <input
+      id="vehicleType"
+      name="vehicleType"
+      type="text"
+      [(ngModel)]="vehicleType"
+      placeholder="e.g. Bike, Car, Auto"
+      maxlength="50"
+      required
+    />
+
+    <label for="vehicleNumber">Vehicle number</label>
+    <input
+      id="vehicleNumber"
+      name="vehicleNumber"
+      type="text"
+      [(ngModel)]="vehicleNumber"
+      placeholder="e.g. MH04MS8172"
+      maxlength="20"
+      required
+    />
+
+    <label for="documentUrl">Document URL (optional)</label>
+    <input
+      id="documentUrl"
+      name="documentUrl"
+      type="url"
+      [(ngModel)]="documentUrl"
+      placeholder="https://example.com/document"
+      maxlength="500"
+    />
+
+    @if (errorMessage()) {
+      <p class="error" role="alert">{{ errorMessage() }}</p>
+    }
+
+    @if (successMessage()) {
+      <p class="success" role="status">{{ successMessage() }}</p>
+    }
+
+    <button
+      type="submit"
+      [disabled]="registrationForm.invalid || submitting()"
+    >
+      {{ submitting() ? 'Submitting...' : 'Submit Vehicle Details' }}
+    </button>
+  </form>
+</main>
