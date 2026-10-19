@@ -1,16 +1,18 @@
 
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+
 import { AuthService } from '../core/auth.service';
 import {
   RiderProfile,
   RiderProfileService
 } from './rider-profile.service';
+import { RiderMap } from './rider-map';
 
 @Component({
   selector: 'app-rider-dashboard',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, RiderMap],
   template: `
     <main class="dashboard">
       <h1>Rider Dashboard</h1>
@@ -109,6 +111,9 @@ import {
             <p class="error">{{ error() }}</p>
           }
         </section>
+
+        <!-- Leaflet Route Selection -->
+        <app-rider-map />
       }
 
       <button
@@ -157,6 +162,7 @@ import {
       display: flex;
       gap: 12px;
       margin-top: 20px;
+      flex-wrap: wrap;
     }
 
     button {
@@ -172,7 +178,7 @@ import {
     }
 
     .logout {
-      margin-top: 6px;
+      margin-top: 24px;
     }
 
     .error {
@@ -188,7 +194,6 @@ import {
 export class RiderDashboard implements OnInit {
 
   readonly auth = inject(AuthService);
-
   private readonly riderService = inject(RiderProfileService);
 
   readonly profile = signal<RiderProfile | null>(null);
