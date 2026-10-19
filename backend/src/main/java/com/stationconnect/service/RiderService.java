@@ -1,5 +1,6 @@
 package com.stationconnect.service;
 
+import com.stationconnect.dto.RiderProfileUpdateRequest;
 import com.stationconnect.entity.RiderProfile;
 import com.stationconnect.entity.User;
 import com.stationconnect.entity.Role;
@@ -19,6 +20,7 @@ public class RiderService {
     public RiderService(
             RiderProfileRepository riderProfileRepository,
             UserRepository userRepository) {
+
         this.riderProfileRepository = riderProfileRepository;
         this.userRepository = userRepository;
     }
@@ -44,5 +46,26 @@ public class RiderService {
                     profile.setUserId(user.getId());
                     return riderProfileRepository.save(profile);
                 });
+    }
+
+    public RiderProfile updateProfile(
+            String email,
+            RiderProfileUpdateRequest request) {
+
+        RiderProfile profile = getProfile(email);
+
+        if (request.defaultPickupLocation() != null) {
+            profile.setDefaultPickupLocation(
+                    request.defaultPickupLocation()
+            );
+        }
+
+        if (request.preferredPaymentMethod() != null) {
+            profile.setPreferredPaymentMethod(
+                    request.preferredPaymentMethod()
+            );
+        }
+
+        return riderProfileRepository.save(profile);
     }
 }

@@ -1,4 +1,3 @@
-
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
@@ -10,14 +9,30 @@ export interface RiderProfile {
   preferredPaymentMethod: string | null;
 }
 
-@Injectable({ providedIn: 'root' })
+export interface RiderProfileUpdateRequest {
+  defaultPickupLocation: string;
+  preferredPaymentMethod: string;
+}
+
+@Injectable({
+  providedIn: 'root'
+})
 export class RiderProfileService {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = `${environment.apiUrl}/rider`;
+
+  private readonly baseUrl =
+    `${environment.apiUrl}/rider/profile`;
 
   getProfile(): Observable<RiderProfile> {
-    return this.http.get<RiderProfile>(
-      `${this.baseUrl}/profile`
+    return this.http.get<RiderProfile>(this.baseUrl);
+  }
+
+  updateProfile(
+    request: RiderProfileUpdateRequest
+  ): Observable<RiderProfile> {
+    return this.http.put<RiderProfile>(
+      this.baseUrl,
+      request
     );
   }
 }
