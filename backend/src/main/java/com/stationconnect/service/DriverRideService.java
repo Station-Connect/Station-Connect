@@ -93,12 +93,19 @@ public class DriverRideService {
         return transition(email, rideId, "ARRIVED", "STARTED");
     }
 
-    @Transactional
-    public Ride completeRide(String email, Long rideId) {
-        Ride ride = transition(email, rideId, "STARTED", "COMPLETED");
-        ride.setCompletedAt(OffsetDateTime.now());
-        return rideRepository.save(ride);
-    }
+
+@Transactional
+public Ride completeRide(String email, Long rideId) {
+    Ride ride = transition(email, rideId, "STARTED", "COMPLETED");
+
+    // Use the estimated fare as the final fare for now.
+    ride.setFinalFare(ride.getEstimatedFare());
+
+    ride.setCompletedAt(OffsetDateTime.now());
+
+    return rideRepository.save(ride);
+}
+
 
     private Ride transition(
             String email,

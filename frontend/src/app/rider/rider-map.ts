@@ -1,4 +1,3 @@
-
 import {
   Component,
   AfterViewInit,
@@ -10,6 +9,7 @@ import {
 } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
+import { DecimalPipe } from '@angular/common';
 import * as L from 'leaflet';
 
 import {
@@ -22,7 +22,6 @@ import {
   Subscription
 } from 'rxjs';
 
-
 import {
   LocationSearchService,
   LocationResult
@@ -32,14 +31,19 @@ import {
   FareService,
   FareEstimateResponse
 } from './fare.service';
-import { DecimalPipe } from '@angular/common';
+
+import {
+  RideRequestService,
+  RideRequestResponse
+} from './ride-request.service';
 
 type LocationMode = 'pickup' | 'drop';
+type RideType = 'SOLO' | 'SHARED';
 
 @Component({
   selector: 'app-rider-map',
   standalone: true,
-  imports: [FormsModule,DecimalPipe],
+  imports: [FormsModule, DecimalPipe],
   template: `
     <section class="map-section">
       <h2>Select Your Route</h2>
@@ -69,10 +73,7 @@ type LocationMode = 'pickup' | 'drop';
 
         @if (results().length > 0) {
           <div class="results">
-            @for (
-              result of results();
-              track result.place_id
-            ) {
+            @for (result of results(); track result.place_id) {
               <button
                 type="button"
                 class="result-item"
@@ -103,6 +104,10 @@ type LocationMode = 'pickup' | 'drop';
         </button>
       </div>
 
+      <p class="selection-hint">
+        Currently selecting: {{ selectionMode() }}
+      </p>
+
       <div #mapContainer class="map"></div>
 
       <div class="locations">
@@ -124,9 +129,7 @@ type LocationMode = 'pickup' | 'drop';
       }
 
       @if (fareError()) {
-        <p class="error">
-          {{ fareError() }}
-        </p>
+        <p class="error">{{ fareError() }}</p>
       }
 
       @if (fare()) {
@@ -184,6 +187,112 @@ type LocationMode = 'pickup' | 'drop';
           </p>
         </section>
       }
+
+      <section class="ride-request-card">
+        <h2>Book Your Ride</h2>
+
+        <label for="rideType">Choose ride type</label>
+
+        <select
+          id="rideType"
+          name="rideType"
+          [ngModel]="rideType()"
+          (ngModelChange)="onRideTypeChange($event)"
+        >
+          <option value="SOLO">Solo Ride</option>
+          <option value="SHARED">Shared Ride</option>
+        </select>
+
+        <button
+          type="button"
+          class="request-button"
+          (click)="requestRide()"
+          [disabled]="
+            requestingRide() ||
+            !pickupCoordinates ||
+            !dropCoordinates ||
+            !fare() ||
+            !!fareLoading() ||
+            !!rideRequestResult()
+          "
+        >
+          {{
+            requestingRide()
+              ? 'Requesting Ride...'
+              : rideRequestResult()
+                ? 'Ride Requested'
+                : 'Request Ride'
+          }}
+        </button>
+
+        @if (rideRequestError()) {
+          <p class="error">{{ rideRequestError() }}</p>
+        }
+
+        @if (rideRequestResult(); as result) {
+          <div class="ride-result">
+            <h3>Ride Request Submitted</h3>
+
+            <p>
+              <strong>Ride ID:</strong>
+              {{ result.ride.id }}
+            </p>
+
+            <p>
+              <strong>Status:</strong>
+              {{ result.ride.status }}
+            </p>
+
+            <p>
+              <strong>Ride type:</strong>
+              {{ result.ride.rideType }}
+            </p>
+
+            <p>
+              <strong>Estimated fare:</strong>
+              ₹{{ result.ride.estimatedFare | number:'1.2-2' }}
+            </p>
+
+            <p>
+              <strong>Nearby drivers found:</strong>
+              {{ result.nearbyDrivers.length }}
+            </p>
+
+            @if (result.nearbyDrivers.length === 0) {
+              <p>
+                No nearby drivers are currently available.
+                Your request was submitted, but a driver has
+                not been assigned yet.
+              </p>
+            } @else {
+              <p>
+                Nearby drivers have been found. Your ride is
+                waiting for a driver to accept it.
+              </p>
+
+              <ul>
+                @for (
+                  driver of result.nearbyDrivers;
+                  track driver.driverId
+                ) {
+                  <li>
+                    Driver #{{ driver.driverId }}
+                    — {{ driver.distanceKm | number:'1.2-2' }} km away
+                  </li>
+                }
+              </ul>
+            }
+
+            <button
+              type="button"
+              class="secondary-button"
+              (click)="prepareAnotherRide()"
+            >
+              Plan Another Ride
+            </button>
+          </div>
+        }
+      </section>
     </section>
   `,
   styles: [`
@@ -234,7 +343,8 @@ type LocationMode = 'pickup' | 'drop';
       flex-wrap: wrap;
     }
 
-    .controls button {
+    .controls button,
+    .secondary-button {
       padding: 10px 16px;
       cursor: pointer;
       border: 1px solid #bbb;
@@ -246,6 +356,11 @@ type LocationMode = 'pickup' | 'drop';
       background: #2563eb;
       color: white;
       border-color: #2563eb;
+    }
+
+    .selection-hint {
+      color: #64748b;
+      font-size: 13px;
     }
 
     .map {
@@ -260,7 +375,8 @@ type LocationMode = 'pickup' | 'drop';
       overflow-wrap: anywhere;
     }
 
-    .fare-card {
+    .fare-card,
+    .ride-request-card {
       margin-top: 24px;
       padding: 24px;
       border: 1px solid #ddd;
@@ -288,11 +404,50 @@ type LocationMode = 'pickup' | 'drop';
 
     .error {
       color: #c62828;
+      overflow-wrap: anywhere;
     }
 
     .note {
       color: #64748b;
       font-size: 13px;
+    }
+
+    .ride-request-card select {
+      display: block;
+      width: 100%;
+      max-width: 320px;
+      margin: 10px 0 16px;
+      padding: 10px;
+      border: 1px solid #bbb;
+      border-radius: 6px;
+      background: white;
+    }
+
+    .request-button {
+      padding: 12px 20px;
+      border: none;
+      border-radius: 6px;
+      background: #2563eb;
+      color: white;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .request-button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .ride-result {
+      margin-top: 18px;
+      padding: 14px;
+      border-radius: 8px;
+      background: #f0fdf4;
+      overflow-wrap: anywhere;
+    }
+
+    .ride-result li {
+      margin: 8px 0;
     }
   `]
 })
@@ -306,6 +461,9 @@ export class RiderMap implements AfterViewInit, OnDestroy {
 
   private readonly fareService =
     inject(FareService);
+
+  private readonly rideRequestService =
+    inject(RideRequestService);
 
   private readonly searchSubject =
     new Subject<string>();
@@ -334,6 +492,12 @@ export class RiderMap implements AfterViewInit, OnDestroy {
   readonly fare = signal<FareEstimateResponse | null>(null);
   readonly fareLoading = signal(false);
   readonly fareError = signal<string | null>(null);
+
+  readonly rideType = signal<RideType>('SOLO');
+  readonly requestingRide = signal(false);
+  readonly rideRequestError = signal<string | null>(null);
+  readonly rideRequestResult =
+    signal<RideRequestResponse | null>(null);
 
   constructor() {
     this.searchSubscription = this.searchSubject.pipe(
@@ -407,16 +571,9 @@ export class RiderMap implements AfterViewInit, OnDestroy {
       return;
     }
 
-    const location = L.latLng(
-      latitude,
-      longitude
-    );
+    const location = L.latLng(latitude, longitude);
 
-    this.selectLocation(
-      location,
-      result.display_name
-    );
-
+    this.selectLocation(location, result.display_name);
     this.map?.setView(location, 15);
 
     this.searchText.set('');
@@ -433,36 +590,32 @@ export class RiderMap implements AfterViewInit, OnDestroy {
     const text = label ??
       `${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}`;
 
+    // A changed route invalidates a previous request result.
+    this.rideRequestResult.set(null);
+    this.rideRequestError.set(null);
+
     if (this.selectionMode() === 'pickup') {
       this.pickupMarker?.remove();
 
-      this.pickupMarker = L.circleMarker(
-        location,
-        {
-          radius: 9,
-          color: 'green',
-          fillColor: 'green',
-          fillOpacity: 1
-        }
-      ).addTo(this.map);
+      this.pickupMarker = L.circleMarker(location, {
+        radius: 9,
+        color: 'green',
+        fillColor: 'green',
+        fillOpacity: 1
+      }).addTo(this.map);
 
       this.pickupCoordinates = location;
       this.pickupText.set(text);
-
       this.selectionMode.set('drop');
-
     } else {
       this.dropMarker?.remove();
 
-      this.dropMarker = L.circleMarker(
-        location,
-        {
-          radius: 9,
-          color: 'red',
-          fillColor: 'red',
-          fillOpacity: 1
-        }
-      ).addTo(this.map);
+      this.dropMarker = L.circleMarker(location, {
+        radius: 9,
+        color: 'red',
+        fillColor: 'red',
+        fillOpacity: 1
+      }).addTo(this.map);
 
       this.dropCoordinates = location;
       this.dropText.set(text);
@@ -472,11 +625,11 @@ export class RiderMap implements AfterViewInit, OnDestroy {
   }
 
   private calculateFare(): void {
-    // Cancel any previous request before starting a new one.
     this.fareSubscription?.unsubscribe();
     this.fare.set(null);
     this.fareError.set(null);
     this.fareLoading.set(false);
+    this.rideRequestError.set(null);
 
     if (
       !this.pickupCoordinates ||
@@ -509,6 +662,73 @@ export class RiderMap implements AfterViewInit, OnDestroy {
         this.fareLoading.set(false);
       }
     });
+  }
+
+  onRideTypeChange(value: string): void {
+    if (value === 'SOLO' || value === 'SHARED') {
+      this.rideType.set(value);
+    }
+  }
+
+  requestRide(): void {
+    if (this.requestingRide()) {
+      return;
+    }
+
+    if (!this.pickupCoordinates || !this.dropCoordinates) {
+      this.rideRequestError.set(
+        'Please select both pickup and drop locations.'
+      );
+      return;
+    }
+
+    if (this.fareLoading() || !this.fare()) {
+      this.rideRequestError.set(
+        'Please wait until the fare estimate is available.'
+      );
+      return;
+    }
+
+    if (this.rideRequestResult()) {
+      return;
+    }
+
+    this.requestingRide.set(true);
+    this.rideRequestError.set(null);
+
+    this.rideRequestService.requestRide({
+      pickupAddress: this.pickupText(),
+      pickupLatitude: this.pickupCoordinates.lat,
+      pickupLongitude: this.pickupCoordinates.lng,
+      dropAddress: this.dropText(),
+      dropLatitude: this.dropCoordinates.lat,
+      dropLongitude: this.dropCoordinates.lng,
+      rideType: this.rideType()
+    }).subscribe({
+      next: response => {
+        this.rideRequestResult.set(response);
+        this.requestingRide.set(false);
+      },
+      error: err => {
+        this.requestingRide.set(false);
+
+        this.rideRequestError.set(
+          err.status === 401
+            ? 'Your session has expired. Please log in again.'
+            : err.status === 403
+              ? 'Your account is not permitted to request rides.'
+              : err.status === 400
+                ? 'The ride request was rejected. Check the selected locations and ride type.'
+                : 'Unable to request the ride. Please try again.'
+        );
+      }
+    });
+  }
+
+  prepareAnotherRide(): void {
+    this.rideRequestResult.set(null);
+    this.rideRequestError.set(null);
+    this.rideType.set('SOLO');
   }
 
   ngOnDestroy(): void {
