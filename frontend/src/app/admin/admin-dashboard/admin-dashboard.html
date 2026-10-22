@@ -1,0 +1,84 @@
+
+<main class="admin-dashboard">
+  <header class="page-header">
+    <div>
+      <h1>Admin Dashboard</h1>
+      <p>Review and manage driver registrations.</p>
+    </div>
+
+    <button
+      type="button"
+      class="refresh-button"
+      [disabled]="loading()"
+      (click)="loadPendingDrivers()"
+    >
+      {{ loading() ? 'Refreshing...' : 'Refresh' }}
+    </button>
+  </header>
+
+  @if (successMessage()) {
+    <p class="success" role="status">{{ successMessage() }}</p>
+  }
+
+  @if (errorMessage()) {
+    <p class="error" role="alert">{{ errorMessage() }}</p>
+  }
+
+  <section class="driver-section">
+    <h2>Pending Drivers ({{ drivers().length }})</h2>
+
+    @if (loading()) {
+      <p>Loading pending driver profiles...</p>
+    } @else if (drivers().length === 0) {
+      <p class="empty-state">There are no pending driver registrations.</p>
+    } @else {
+      <div class="driver-list">
+        @for (driver of drivers(); track driver.userId) {
+          <article class="driver-card">
+            <div class="driver-details">
+              <h3>Driver #{{ driver.userId }}</h3>
+              <p><strong>Vehicle type:</strong> {{ driver.vehicleType }}</p>
+              <p><strong>Vehicle number:</strong> {{ driver.vehicleNumber }}</p>
+              <p>
+                <strong>Verification:</strong>
+                <span class="status">{{ driver.verificationStatus }}</span>
+              </p>
+
+              @if (driver.documentUrl) {
+                <p>
+                  <a
+                    [href]="driver.documentUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    View document
+                  </a>
+                </p>
+              }
+            </div>
+
+            <div class="actions">
+              <button
+                type="button"
+                class="approve-button"
+                [disabled]="actionInProgress() !== null"
+                (click)="updateVerification(driver, 'APPROVED')"
+              >
+                {{ actionInProgress() === driver.userId ? 'Updating...' : 'Approve' }}
+              </button>
+
+              <button
+                type="button"
+                class="reject-button"
+                [disabled]="actionInProgress() !== null"
+                (click)="updateVerification(driver, 'REJECTED')"
+              >
+                Reject
+              </button>
+            </div>
+          </article>
+        }
+      </div>
+    }
+  </section>
+</main>

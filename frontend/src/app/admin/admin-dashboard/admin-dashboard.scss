@@ -1,0 +1,116 @@
+
+.admin-dashboard {
+  max-width: 1000px;
+  margin: 2rem auto;
+  padding: 1.5rem;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+h1,
+h2,
+h3 {
+  margin-top: 0;
+}
+
+.page-header p {
+  color: #666;
+}
+
+.driver-section {
+  margin-top: 2rem;
+}
+
+.driver-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.driver-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1.25rem;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+}
+
+.driver-details p {
+  margin: 0.6rem 0;
+  overflow-wrap: anywhere;
+}
+
+.status {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  background: #fff0cc;
+  font-size: 0.85rem;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+button {
+  padding: 0.65rem 0.9rem;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.approve-button {
+  background: #176b35;
+  color: white;
+}
+
+.reject-button {
+  background: #b42318;
+  color: white;
+}
+
+.refresh-button {
+  background: #e9eef5;
+}
+
+.success {
+  color: #176b35;
+}
+
+.error {
+  color: #b00020;
+}
+
+.empty-state {
+  padding: 1rem;
+  border: 1px dashed #ccc;
+  border-radius: 8px;
+  color: #666;
+}
+
+@media (max-width: 600px) {
+  .driver-card,
+  .page-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .actions button {
+    flex: 1;
+  }
+}
