@@ -1,4 +1,3 @@
-
 import {
   Component,
   OnInit,
@@ -22,31 +21,6 @@ interface DriverProfile {
   verificationStatus: string;
   online: boolean;
   averageRating: number | null;
-}
-
-interface Ride {
-  id: number;
-  requestedBy: number;
-  driverId: number | null;
-  pickupAddress: string;
-  pickupLat: number;
-  pickupLng: number;
-  dropAddress: string;
-  dropLat: number;
-  dropLng: number;
-  rideType: string;
-  status: string;
-  estimatedFare: number;
-  finalFare: number | null;
-  requestedAt: string;
-  completedAt: string | null;
-}
-
-interface DriverLocationResponse {
-  driverId: number;
-  latitude: number;
-  longitude: number;
-  updatedAt: string;
 }
 
 @Component({
@@ -141,7 +115,7 @@ interface DriverLocationResponse {
       @if (loading()) {
         <p>Loading driver profile...</p>
       } @else if (error()) {
-        <p class="error" role="alert">{{ error() }}</p>
+        <p class="error">{{ error() }}</p>
       } @else if (profile(); as p) {
         <section class="profile">
           <h2>Vehicle Details</h2>
@@ -205,180 +179,19 @@ interface DriverLocationResponse {
           }
 
           @if (statusMessage()) {
-            <p class="success" role="status">{{ statusMessage() }}</p>
+            <p>{{ statusMessage() }}</p>
           }
 
           @if (statusError()) {
-            <p class="error" role="alert">{{ statusError() }}</p>
-          }
-
-          <hr />
-
-          <h2>Driver Location</h2>
-          <p>
-            Share your current location so the system can find nearby ride
-            requests.
-          </p>
-
-          <button
-            type="button"
-            [disabled]="locationUpdating()"
-            (click)="shareCurrentLocation()"
-          >
-            {{ locationUpdating() ? 'Getting location...' : 'Share Current Location' }}
-          </button>
-
-          @if (locationMessage()) {
-            <p class="success" role="status">{{ locationMessage() }}</p>
-          }
-
-          @if (locationError()) {
-            <p class="error" role="alert">{{ locationError() }}</p>
-          }
-
-          @if (lastLocation(); as location) {
-            <p>
-              <strong>Last shared coordinates:</strong>
-              {{ location.latitude }}, {{ location.longitude }}
-            </p>
+            <p class="error">{{ statusError() }}</p>
           }
         </section>
-
-        <section class="ride-section">
-          <div class="section-heading">
-            <h2>Available Rides</h2>
-            <button
-              type="button"
-              [disabled]="ridesLoading() || rideActionId() !== null"
-              (click)="refreshRides()"
-            >
-              Refresh
-            </button>
-          </div>
-
-          @if (!p.online || p.verificationStatus !== 'APPROVED') {
-            <p class="notice">
-              You must be approved and online to receive ride requests.
-            </p>
-          } @else if (ridesLoading()) {
-            <p>Loading available rides...</p>
-          } @else if (ridesError()) {
-            <p class="error" role="alert">{{ ridesError() }}</p>
-          } @else if (availableRides().length === 0) {
-            <p>No available ride requests right now.</p>
-          } @else {
-            <div class="ride-list">
-              @for (ride of availableRides(); track ride.id) {
-                <article class="ride-card">
-                  <h3>Ride #{{ ride.id }}</h3>
-                  <p><strong>Type:</strong> {{ ride.rideType }}</p>
-                  <p><strong>Pickup:</strong> {{ ride.pickupAddress }}</p>
-                  <p><strong>Drop-off:</strong> {{ ride.dropAddress }}</p>
-                  <p><strong>Estimated fare:</strong> {{ ride.estimatedFare }}</p>
-                  <p><strong>Status:</strong> {{ ride.status }}</p>
-
-                  <div class="actions">
-                    <button
-                      type="button"
-                      class="accept-button"
-                      [disabled]="rideActionId() !== null"
-                      (click)="acceptRide(ride)"
-                    >
-                      {{ rideActionId() === ride.id ? 'Processing...' : 'Accept' }}
-                    </button>
-
-                    <button
-                      type="button"
-                      class="reject-button"
-                      [disabled]="rideActionId() !== null"
-                      (click)="rejectRide(ride)"
-                    >
-                      Reject
-                    </button>
-                  </div>
-                </article>
-              }
-            </div>
-          }
-        </section>
-
-        <section class="ride-section">
-          <div class="section-heading">
-            <h2>Active Trips</h2>
-            <button
-              type="button"
-              [disabled]="ridesLoading() || rideActionId() !== null"
-              (click)="refreshRides()"
-            >
-              Refresh
-            </button>
-          </div>
-
-          @if (ridesLoading()) {
-            <p>Loading your trips...</p>
-          } @else if (activeRides().length === 0) {
-            <p>You have no active trips.</p>
-          } @else {
-            <div class="ride-list">
-              @for (ride of activeRides(); track ride.id) {
-                <article class="ride-card">
-                  <h3>Ride #{{ ride.id }}</h3>
-                  <p><strong>Pickup:</strong> {{ ride.pickupAddress }}</p>
-                  <p><strong>Drop-off:</strong> {{ ride.dropAddress }}</p>
-                  <p><strong>Status:</strong> {{ ride.status }}</p>
-                  <p><strong>Estimated fare:</strong> {{ ride.estimatedFare }}</p>
-
-                  <div class="actions">
-                    @if (ride.status === 'ACCEPTED') {
-                      <button
-                        type="button"
-                        [disabled]="rideActionId() !== null"
-                        (click)="transitionRide(ride, 'arrived')"
-                      >
-                        Mark Arrived
-                      </button>
-                    }
-
-                    @if (ride.status === 'ARRIVED') {
-                      <button
-                        type="button"
-                        [disabled]="rideActionId() !== null"
-                        (click)="transitionRide(ride, 'start')"
-                      >
-                        Start Trip
-                      </button>
-                    }
-
-                    @if (ride.status === 'STARTED') {
-                      <button
-                        type="button"
-                        class="accept-button"
-                        [disabled]="rideActionId() !== null"
-                        (click)="transitionRide(ride, 'complete')"
-                      >
-                        Complete Trip
-                      </button>
-                    }
-                  </div>
-                </article>
-              }
-            </div>
-          }
-        </section>
-
-        @if (rideMessage()) {
-          <p class="success" role="status">{{ rideMessage() }}</p>
-        }
-
-        @if (rideActionError()) {
-          <p class="error" role="alert">{{ rideActionError() }}</p>
-        }
       }
     </main>
   `,
   styles: [`
     .dashboard {
-      max-width: 900px;
+      max-width: 720px;
       margin: 2rem auto;
       padding: 1.5rem;
     }
