@@ -2,11 +2,13 @@
 package com.stationconnect.repository;
 
 import com.stationconnect.entity.Ride;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -17,6 +19,22 @@ public interface RideRepository extends JpaRepository<Ride, Long> {
     List<Ride> findByDriverIdOrderByRequestedAtDesc(Long driverId);
 
     Optional<Ride> findByIdAndDriverId(Long id, Long driverId);
+
+    /**
+     * Finds rides assigned to a driver that have one of the supplied statuses.
+     * Used to broadcast driver location updates only for active rides.
+     */
+    List<Ride> findByDriverIdAndStatusIn(
+            Long driverId,
+            Collection<String> statuses);
+
+    /**
+     * Finds a ride only when it belongs to the specified rider.
+     * Used to prevent riders from accessing other riders' rides.
+     */
+    Optional<Ride> findByIdAndRequestedBy(
+            Long id,
+            Long requestedBy);
 
     @Modifying
     @Query("""

@@ -5,7 +5,9 @@ import com.stationconnect.dto.DriverTrackingResponse;
 import com.stationconnect.dto.RideRequest;
 import com.stationconnect.dto.RideRequestResponse;
 import com.stationconnect.dto.RiderProfileUpdateRequest;
+import com.stationconnect.entity.Ride;
 import com.stationconnect.entity.RiderProfile;
+import com.stationconnect.service.RiderRideService;
 import com.stationconnect.service.RiderService;
 import com.stationconnect.service.RideRequestService;
 import com.stationconnect.service.RideTrackingService;
@@ -23,14 +25,17 @@ public class RiderController {
     private final RiderService riderService;
     private final RideRequestService rideRequestService;
     private final RideTrackingService rideTrackingService;
+    private final RiderRideService riderRideService;
 
     public RiderController(
             RiderService riderService,
             RideRequestService rideRequestService,
-            RideTrackingService rideTrackingService) {
+            RideTrackingService rideTrackingService,
+            RiderRideService riderRideService) {
         this.riderService = riderService;
         this.rideRequestService = rideRequestService;
         this.rideTrackingService = rideTrackingService;
+        this.riderRideService = riderRideService;
     }
 
     @GetMapping("/profile")
@@ -60,6 +65,14 @@ public class RiderController {
             Principal principal,
             @PathVariable Long rideId) {
         return rideTrackingService.getDriverLocation(
+                principal.getName(), rideId);
+    }
+
+    @GetMapping("/rides/{rideId}")
+    public Ride getMyRide(
+            Principal principal,
+            @PathVariable Long rideId) {
+        return riderRideService.getMyRide(
                 principal.getName(), rideId);
     }
 }
