@@ -1,7 +1,18 @@
 
-import { Component, OnInit, inject, signal } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  OnDestroy,
+  inject,
+  signal,
+} from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { Subscription } from 'rxjs';
 import { environment } from '../../../environments/environment';
+import {
+  DriverRideNotificationService,
+  RideRequestNotification,
+} from '../driver-ride-notification.service';
 
 interface DriverProfile {
   userId: number;
@@ -45,6 +56,88 @@ interface DriverLocationResponse {
     <main class="dashboard">
       <h1>Driver Dashboard</h1>
 
+      <section class="connection">
+        <h2>Live ride notifications</h2>
+
+        <p>
+          Connection:
+          <strong>{{ notifications.connectionStatus() }}</strong>
+        </p>
+
+        @if (profile(); as p) {
+          @if (!p.online) {
+            <p class="notice">
+              Go online to become eligible for ride requests.
+            </p>
+          }
+        }
+
+        @if (notifications.incomingRequests().length === 0) {
+          <p>No incoming ride requests at the moment.</p>
+        } @else {
+          @for (
+            request of notifications.incomingRequests();
+            track request.rideId
+          ) {
+            <article class="ride-card">
+              <h3>Ride #{{ request.rideId }}</h3>
+
+              <p>
+                <strong>Pickup:</strong>
+                {{ request.pickupAddress }}
+              </p>
+
+              <p>
+                <strong>Drop-off:</strong>
+                {{ request.dropAddress }}
+              </p>
+
+              <p>
+                <strong>Ride type:</strong>
+                {{ request.rideType }}
+              </p>
+
+              <p>
+                <strong>Distance to pickup:</strong>
+                {{ request.distanceKm }} km
+              </p>
+
+              <p>
+                <strong>Estimated fare:</strong>
+                {{ request.estimatedFare }}
+              </p>
+
+              <div class="actions">
+                <button
+                  type="button"
+                  [disabled]="busyRideId() !== null"
+                  (click)="acceptRide(request)"
+                >
+                  Accept
+                </button>
+
+                <button
+                  type="button"
+                  class="secondary"
+                  [disabled]="busyRideId() !== null"
+                  (click)="rejectRide(request)"
+                >
+                  Reject
+                </button>
+              </div>
+            </article>
+          }
+        }
+
+        @if (rideMessage()) {
+          <p>{{ rideMessage() }}</p>
+        }
+
+        @if (rideError()) {
+          <p class="error">{{ rideError() }}</p>
+        }
+      </section>
+
       @if (loading()) {
         <p>Loading driver profile...</p>
       } @else if (error()) {
@@ -52,9 +145,22 @@ interface DriverLocationResponse {
       } @else if (profile(); as p) {
         <section class="profile">
           <h2>Vehicle Details</h2>
-          <p><strong>Vehicle type:</strong> {{ p.vehicleType }}</p>
-          <p><strong>Vehicle number:</strong> {{ p.vehicleNumber }}</p>
-          <p><strong>Verification:</strong> {{ p.verificationStatus }}</p>
+
+          <p>
+            <strong>Vehicle type:</strong>
+            {{ p.vehicleType }}
+          </p>
+
+          <p>
+            <strong>Vehicle number:</strong>
+            {{ p.vehicleNumber }}
+          </p>
+
+          <p>
+            <strong>Verification:</strong>
+            {{ p.verificationStatus }}
+          </p>
+
           <p>
             <strong>Average rating:</strong>
             {{ p.averageRating ?? 'Not rated yet' }}
@@ -63,10 +169,20 @@ interface DriverLocationResponse {
           <hr />
 
           <h2>Availability</h2>
+
           <p>
             Current status:
             <strong>{{ p.online ? 'Online' : 'Offline' }}</strong>
           </p>
+
+          <p>
+            <strong>Location:</strong>
+            {{ locationStatus() }}
+          </p>
+
+          @if (locationError()) {
+            <p class="error">{{ locationError() }}</p>
+          }
 
           <button
             type="button"
@@ -268,36 +384,21 @@ interface DriverLocationResponse {
     }
 
     .profile,
+    .connection,
     .ride-card {
       border: 1px solid #ddd;
       border-radius: 8px;
       padding: 1rem;
+      margin-bottom: 1rem;
     }
 
-    .ride-section {
-      margin-top: 2rem;
-    }
-
-    .section-heading {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 1rem;
-    }
-
-    .ride-list {
-      display: grid;
-      gap: 1rem;
-    }
-
-    .ride-card h3 {
-      margin-top: 0;
+    .ride-card {
+      background: #fafafa;
     }
 
     .actions {
       display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
+      gap: 0.75rem;
       margin-top: 1rem;
     }
 
@@ -308,19 +409,13 @@ interface DriverLocationResponse {
       cursor: pointer;
     }
 
+    button.secondary {
+      background: #eee;
+    }
+
     button:disabled {
       cursor: not-allowed;
       opacity: 0.6;
-    }
-
-    .accept-button {
-      background: #176b35;
-      color: white;
-    }
-
-    .reject-button {
-      background: #b42318;
-      color: white;
     }
 
     .error {
@@ -330,20 +425,12 @@ interface DriverLocationResponse {
     .notice {
       color: #805500;
     }
-
-    .success {
-      color: #176b35;
-    }
-
-    @media (max-width: 600px) {
-      .section-heading {
-        align-items: flex-start;
-      }
-    }
   `],
 })
-export class DriverDashboard implements OnInit {
+export class DriverDashboard implements OnInit, OnDestroy {
   private readonly http = inject(HttpClient);
+
+  readonly notifications = inject(DriverRideNotificationService);
 
   readonly profile = signal<DriverProfile | null>(null);
   readonly loading = signal(true);
@@ -351,25 +438,31 @@ export class DriverDashboard implements OnInit {
   readonly error = signal('');
   readonly statusMessage = signal('');
   readonly statusError = signal('');
-
-  readonly locationUpdating = signal(false);
-  readonly locationMessage = signal('');
-  readonly locationError = signal('');
-  readonly lastLocation = signal<{
-    latitude: number;
-    longitude: number;
-  } | null>(null);
-
-  readonly availableRides = signal<Ride[]>([]);
-  readonly activeRides = signal<Ride[]>([]);
-  readonly ridesLoading = signal(false);
-  readonly ridesError = signal('');
-  readonly rideActionError = signal('');
   readonly rideMessage = signal('');
-  readonly rideActionId = signal<number | null>(null);
+  readonly rideError = signal('');
+  readonly busyRideId = signal<number | null>(null);
+
+  readonly locationStatus = signal('Location tracking is inactive.');
+  readonly locationError = signal('');
+
+  private rideActionSubscription?: Subscription;
+  private statusSubscription?: Subscription;
+  private locationRequestSubscription?: Subscription;
+
+  private locationIntervalId?: number;
+  private locationTracking = false;
+  private locationUpdateInFlight = false;
 
   ngOnInit(): void {
     this.loadProfile();
+    this.notifications.connect();
+  }
+
+  ngOnDestroy(): void {
+    this.stopLocationUpdates();
+    this.rideActionSubscription?.unsubscribe();
+    this.statusSubscription?.unsubscribe();
+    this.notifications.disconnect();
   }
 
   canGoOnline(profile: DriverProfile): boolean {
@@ -387,22 +480,25 @@ export class DriverDashboard implements OnInit {
     this.statusMessage.set('');
     this.statusError.set('');
 
-    this.http.patch<DriverProfile>(
+    this.statusSubscription?.unsubscribe();
+
+    this.statusSubscription = this.http.patch<DriverProfile>(
       `${environment.apiUrl}/driver/status`,
       { online },
     ).subscribe({
-      next: (updatedProfile) => {
+      next: (updatedProfile: DriverProfile) => {
         this.profile.set(updatedProfile);
-        this.statusMessage.set(
-          `You are now ${updatedProfile.online ? 'online' : 'offline'}.`,
-        );
         this.updating.set(false);
 
         if (updatedProfile.online) {
-          this.refreshRides();
+          this.startLocationUpdates();
         } else {
-          this.availableRides.set([]);
+          this.stopLocationUpdates();
         }
+
+        this.statusMessage.set(
+          `You are now ${updatedProfile.online ? 'online' : 'offline'}.`,
+        );
       },
       error: (err: HttpErrorResponse) => {
         this.statusError.set(
@@ -410,193 +506,66 @@ export class DriverDashboard implements OnInit {
             ? 'Your account is not permitted to change to this status.'
             : 'Unable to update status. Please try again.',
         );
+
         this.updating.set(false);
       },
     });
   }
 
-  shareCurrentLocation(): void {
-    this.locationMessage.set('');
-    this.locationError.set('');
-
-    if (!navigator.geolocation) {
-      this.locationError.set(
-        'Geolocation is not supported by this browser.',
-      );
-      return;
-    }
-
-    this.locationUpdating.set(true);
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const latitude = position.coords.latitude;
-        const longitude = position.coords.longitude;
-
-        this.http.put<DriverLocationResponse>(
-          `${environment.apiUrl}/driver/location`,
-          { latitude, longitude },
-        ).subscribe({
-          next: () => {
-            this.lastLocation.set({ latitude, longitude });
-            this.locationMessage.set(
-              'Your location was shared successfully.',
-            );
-            this.locationUpdating.set(false);
-
-            if (this.profile()?.online) {
-              this.refreshRides();
-            }
-          },
-          error: (err: HttpErrorResponse) => {
-            this.locationError.set(
-              err.status === 400
-                ? 'The location was invalid. Please try again.'
-                : err.status === 401
-                  ? 'Your session has expired. Please log in again.'
-                  : 'Unable to save your location. Please try again.',
-            );
-            this.locationUpdating.set(false);
-          },
-        });
-      },
-      (error: GeolocationPositionError) => {
-        const message =
-          error.code === error.PERMISSION_DENIED
-            ? 'Location permission was denied. Allow location access in your browser settings and try again.'
-            : error.code === error.POSITION_UNAVAILABLE
-              ? 'Your current location is unavailable. Check your device location settings and try again.'
-              : 'Getting your location timed out. Please try again.';
-
-        this.locationError.set(message);
-        this.locationUpdating.set(false);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0,
-      },
-    );
-  }
-
-  refreshRides(): void {
-    const profile = this.profile();
-
-    if (
-      !profile ||
-      !profile.online ||
-      profile.verificationStatus !== 'APPROVED'
-    ) {
-      this.availableRides.set([]);
-      this.loadActiveRidesOnly();
-      return;
-    }
-
-    this.ridesLoading.set(true);
-    this.ridesError.set('');
-
-    this.http.get<Ride[]>(
-      `${environment.apiUrl}/driver/rides/available`,
-    ).subscribe({
-      next: (rides) => {
-        this.availableRides.set(rides);
-        this.loadActiveRidesOnly();
-      },
-      error: (err: HttpErrorResponse) => {
-        this.ridesError.set(
-          err.status === 403
-            ? 'Your driver profile must be approved and online to view available rides.'
-            : err.status === 409
-              ? 'Share your current location before searching for nearby rides.'
-              : 'Unable to load available rides.',
-        );
-        this.loadActiveRidesOnly();
-      },
-    });
-  }
-
-  acceptRide(ride: Ride): void {
+  acceptRide(request: RideRequestNotification): void {
     this.performRideAction(
-      ride,
+      request,
       'accept',
       'Ride accepted successfully.',
     );
   }
 
-  rejectRide(ride: Ride): void {
+  rejectRide(request: RideRequestNotification): void {
     this.performRideAction(
-      ride,
+      request,
       'reject',
-      'Ride declined. It remains available for other drivers.',
+      'Ride offer dismissed.',
     );
   }
 
-  transitionRide(
-    ride: Ride,
-    action: 'arrived' | 'start' | 'complete',
-  ): void {
-    const messages = {
-      arrived: 'Pickup arrival recorded.',
-      start: 'Trip started.',
-      complete: 'Trip completed successfully.',
-    };
-
-    this.performRideAction(ride, action, messages[action]);
-  }
-
   private performRideAction(
-    ride: Ride,
-    action: string,
+    request: RideRequestNotification,
+    action: 'accept' | 'reject',
     successMessage: string,
   ): void {
-    if (this.rideActionId() !== null) {
+    if (this.busyRideId() !== null) {
       return;
     }
 
-    this.rideActionId.set(ride.id);
-    this.rideActionError.set('');
+    this.busyRideId.set(request.rideId);
     this.rideMessage.set('');
+    this.rideError.set('');
 
-    this.http.patch<Ride>(
-      `${environment.apiUrl}/driver/rides/${ride.id}/${action}`,
+    this.rideActionSubscription?.unsubscribe();
+
+    this.rideActionSubscription = this.http.patch<unknown>(
+      `${environment.apiUrl}/driver/rides/${request.rideId}/${action}`,
       {},
     ).subscribe({
-      next: () => {
-        this.rideActionId.set(null);
+      next: (_response: unknown) => {
+        this.notifications.removeRequest(request.rideId);
         this.rideMessage.set(successMessage);
-        this.refreshRides();
+        this.busyRideId.set(null);
+
+        if (action === 'accept') {
+          this.loadProfile();
+        }
       },
       error: (err: HttpErrorResponse) => {
-        this.rideActionId.set(null);
-        this.rideActionError.set(
+        this.rideError.set(
           err.status === 409
-            ? 'This ride has changed or is no longer available. Refresh and try again.'
+            ? 'This ride is no longer available. Refresh your requests.'
             : err.status === 403
-              ? 'You are not permitted to perform this ride action.'
-              : err.status === 404
-                ? 'Ride not found or it is not assigned to your account.'
-                : 'Ride action failed. Please try again.',
+              ? 'You must be an approved, online driver to perform this action.'
+              : 'Unable to process the ride action. Please try again.',
         );
-        this.refreshRides();
-      },
-    });
-  }
 
-  private loadActiveRidesOnly(): void {
-    this.http.get<Ride[]>(
-      `${environment.apiUrl}/driver/rides/active`,
-    ).subscribe({
-      next: (rides) => {
-        this.activeRides.set(
-          rides.filter((ride) =>
-            ['ACCEPTED', 'ARRIVED', 'STARTED'].includes(ride.status),
-          ),
-        );
-        this.ridesLoading.set(false);
-      },
-      error: () => {
-        this.ridesLoading.set(false);
-        this.ridesError.set('Unable to load your active trips.');
+        this.busyRideId.set(null);
       },
     });
   }
@@ -605,22 +574,130 @@ export class DriverDashboard implements OnInit {
     this.http.get<DriverProfile>(
       `${environment.apiUrl}/driver/profile`,
     ).subscribe({
-      next: (profile) => {
+      next: (profile: DriverProfile) => {
         this.profile.set(profile);
         this.loading.set(false);
 
-        if (profile.online && profile.verificationStatus === 'APPROVED') {
-          this.refreshRides();
+        if (profile.online) {
+          this.startLocationUpdates();
         } else {
-          this.loadActiveRidesOnly();
+          this.stopLocationUpdates();
         }
       },
-      error: () => {
+      error: (_err: HttpErrorResponse) => {
         this.error.set(
           'Unable to load your driver profile. Please log in again or contact support.',
         );
+
         this.loading.set(false);
       },
     });
+  }
+
+  private startLocationUpdates(): void {
+    if (this.locationTracking) {
+      return;
+    }
+
+    if (!navigator.geolocation) {
+      this.locationStatus.set(
+        'Location is unsupported by this browser.',
+      );
+      this.locationError.set(
+        'Use a browser that supports geolocation.',
+      );
+      return;
+    }
+
+    this.locationTracking = true;
+    this.locationError.set('');
+    this.locationStatus.set('Requesting your location...');
+
+    // Send the first location immediately.
+    this.updateDriverLocation();
+
+    // Refresh the saved location every 60 seconds.
+    this.locationIntervalId = window.setInterval(() => {
+      this.updateDriverLocation();
+    }, 60_000);
+  }
+
+  private updateDriverLocation(): void {
+    if (!this.locationTracking || this.locationUpdateInFlight) {
+      return;
+    }
+
+    this.locationUpdateInFlight = true;
+
+    navigator.geolocation.getCurrentPosition(
+      (position: GeolocationPosition) => {
+        if (!this.locationTracking) {
+          this.locationUpdateInFlight = false;
+          return;
+        }
+
+        const latitude = position.coords.latitude;
+        const longitude = position.coords.longitude;
+
+        this.locationRequestSubscription?.unsubscribe();
+
+        this.locationRequestSubscription = this.http.put<unknown>(
+          `${environment.apiUrl}/driver/location`,
+          { latitude, longitude },
+        ).subscribe({
+          next: () => {
+            this.locationStatus.set('Location updated successfully.');
+            this.locationError.set('');
+            this.locationUpdateInFlight = false;
+          },
+          error: (err: HttpErrorResponse) => {
+            this.locationStatus.set('Unable to update location.');
+
+            this.locationError.set(
+              err.status === 401
+                ? 'Your session has expired. Please log in again.'
+                : err.status === 403
+                  ? 'Your account cannot update its location.'
+                  : 'Location update failed. Check your connection and try again.',
+            );
+
+            this.locationUpdateInFlight = false;
+          },
+        });
+      },
+      (error: GeolocationPositionError) => {
+        this.locationUpdateInFlight = false;
+        this.locationStatus.set('Unable to obtain your location.');
+
+        this.locationError.set(
+          error.code === error.PERMISSION_DENIED
+            ? 'Location permission was denied. Allow location access in your browser settings.'
+            : error.code === error.POSITION_UNAVAILABLE
+              ? 'Your current position is unavailable. Check your device location settings.'
+              : 'Location request timed out. The dashboard will retry.',
+        );
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15_000,
+        maximumAge: 10_000,
+      },
+    );
+  }
+
+  private stopLocationUpdates(): void {
+    this.locationTracking = false;
+
+    if (this.locationIntervalId !== undefined) {
+      window.clearInterval(this.locationIntervalId);
+      this.locationIntervalId = undefined;
+    }
+
+    this.locationRequestSubscription?.unsubscribe();
+    this.locationRequestSubscription = undefined;
+
+    this.locationUpdateInFlight = false;
+    this.locationStatus.set('Location tracking is inactive.');
+    this.locationError.set('');
   }
 }
