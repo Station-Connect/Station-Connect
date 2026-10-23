@@ -1,11 +1,13 @@
 
 package com.stationconnect.service;
 
+import com.stationconnect.entity.DriverLocation;
 import com.stationconnect.entity.DriverProfile;
 import com.stationconnect.entity.Ride;
 import com.stationconnect.entity.Role;
 import com.stationconnect.entity.User;
 import com.stationconnect.exception.ApiException;
+import com.stationconnect.repository.DriverLocationRepository;
 import com.stationconnect.repository.DriverProfileRepository;
 import com.stationconnect.repository.RideRepository;
 import com.stationconnect.repository.UserRepository;
@@ -21,27 +23,56 @@ import java.util.Locale;
 @Service
 public class DriverRideService {
 
+    private static final double SEARCH_RADIUS_KM = 10.0;
+    private static final long LOCATION_MAX_AGE_MINUTES = 5;
+
     private final RideRepository rideRepository;
     private final UserRepository userRepository;
     private final DriverProfileRepository driverProfileRepository;
+    private final DriverLocationRepository driverLocationRepository;
 
     public DriverRideService(
             RideRepository rideRepository,
             UserRepository userRepository,
-            DriverProfileRepository driverProfileRepository) {
+            DriverProfileRepository driverProfileRepository,
+            DriverLocationRepository driverLocationRepository) {
         this.rideRepository = rideRepository;
         this.userRepository = userRepository;
         this.driverProfileRepository = driverProfileRepository;
+        this.driverLocationRepository = driverLocationRepository;
     }
 
+    @Transactional(readOnly = true)
     public List<Ride> getAvailableRides(String email) {
-        getEligibleDriverId(email);
+        Long driverId = getEligibleDriverId(email);
+
+        DriverLocation location = driverLocationRepository.findById(driverId)
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.CONFLICT,
+                        "Update your location before viewing available rides"));
+
+        OffsetDateTime cutoff = OffsetDateTime.now()
+                .minusMinutes(LOCATION_MAX_AGE_MINUTES);
+
+        if (location.getUpdatedAt() == null
+                || location.getUpdatedAt().isBefore(cutoff)) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "Your location is stale. Update your location to view rides");
+        }
+
         return rideRepository.findByStatusOrderByRequestedAtAsc("REQUESTED")
                 .stream()
                 .filter(ride -> ride.getDriverId() == null)
+                .filter(ride -> distanceKm(
+                        location.getLatitude(),
+                        location.getLongitude(),
+                        ride.getPickupLat(),
+                        ride.getPickupLng()) <= SEARCH_RADIUS_KM)
                 .toList();
     }
 
+    @Transactional(readOnly = true)
     public List<Ride> getMyRides(String email) {
         Long driverId = getDriverId(email);
         return rideRepository.findByDriverIdOrderByRequestedAtDesc(driverId);
@@ -78,8 +109,7 @@ public class DriverRideService {
                     "Only unassigned requested rides can be rejected");
         }
 
-        // Rejection does not change the shared ride's status or assignment.
-        // It simply declines this driver's offer.
+        // This does not assign or cancel the shared ride.
         return ride;
     }
 
@@ -93,19 +123,15 @@ public class DriverRideService {
         return transition(email, rideId, "ARRIVED", "STARTED");
     }
 
+    @Transactional
+    public Ride completeRide(String email, Long rideId) {
+        Ride ride = transition(email, rideId, "STARTED", "COMPLETED");
 
-@Transactional
-public Ride completeRide(String email, Long rideId) {
-    Ride ride = transition(email, rideId, "STARTED", "COMPLETED");
+        ride.setFinalFare(ride.getEstimatedFare());
+        ride.setCompletedAt(OffsetDateTime.now());
 
-    // Use the estimated fare as the final fare for now.
-    ride.setFinalFare(ride.getEstimatedFare());
-
-    ride.setCompletedAt(OffsetDateTime.now());
-
-    return rideRepository.save(ride);
-}
-
+        return rideRepository.save(ride);
+    }
 
     private Ride transition(
             String email,
@@ -150,8 +176,7 @@ public Ride completeRide(String email, Long rideId) {
 
         DriverProfile profile = driverProfileRepository.findById(driverId)
                 .orElseThrow(() -> new ApiException(
-                        HttpStatus.NOT_FOUND,
-                        "Driver profile not found"));
+                        HttpStatus.NOT_FOUND, "Driver profile not found"));
 
         if (profile.getVerificationStatus()
                     != DriverProfile.VerificationStatus.APPROVED
@@ -162,5 +187,24 @@ public Ride completeRide(String email, Long rideId) {
         }
 
         return driverId;
+    }
+
+    private double distanceKm(
+            double lat1,
+            double lon1,
+            double lat2,
+            double lon2) {
+
+        double latDistance = Math.toRadians(lat2 - lat1);
+        double lonDistance = Math.toRadians(lon2 - lon1);
+
+        double a = Math.sin(latDistance / 2) * Math.sin(latDistance / 2)
+                + Math.cos(Math.toRadians(lat1))
+                * Math.cos(Math.toRadians(lat2))
+                * Math.sin(lonDistance / 2) * Math.sin(lonDistance / 2);
+
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+        return 6371.0 * c;
     }
 }

@@ -1,3 +1,4 @@
+
 import {
   Component,
   AfterViewInit,
@@ -14,13 +15,18 @@ import * as L from 'leaflet';
 
 import {
   Subject,
+  Subscription,
   debounceTime,
   distinctUntilChanged,
   switchMap,
   catchError,
   of,
-  Subscription
+  interval,
+  startWith
 } from 'rxjs';
+
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { environment } from '../../environments/environment';
 
 import {
   LocationSearchService,
@@ -40,6 +46,15 @@ import {
 type LocationMode = 'pickup' | 'drop';
 type RideType = 'SOLO' | 'SHARED';
 
+interface DriverTrackingResponse {
+  rideId: number;
+  rideStatus: string;
+  driverId: number | null;
+  latitude: number | null;
+  longitude: number | null;
+  locationUpdatedAt: string | null;
+}
+
 @Component({
   selector: 'app-rider-map',
   standalone: true,
@@ -47,12 +62,10 @@ type RideType = 'SOLO' | 'SHARED';
   template: `
     <section class="map-section">
       <h2>Select Your Route</h2>
-
       <p>Search for an address or click on the map.</p>
 
       <div class="search-group">
         <label for="locationSearch">Search location</label>
-
         <input
           id="locationSearch"
           type="text"
@@ -111,75 +124,54 @@ type RideType = 'SOLO' | 'SHARED';
       <div #mapContainer class="map"></div>
 
       <div class="locations">
-        <p>
-          <strong>Pickup:</strong>
-          {{ pickupText() }}
-        </p>
-
-        <p>
-          <strong>Drop:</strong>
-          {{ dropText() }}
-        </p>
+        <p><strong>Pickup:</strong> {{ pickupText() }}</p>
+        <p><strong>Drop:</strong> {{ dropText() }}</p>
       </div>
 
       @if (fareLoading()) {
-        <p class="loading">
-          Calculating estimated fare...
-        </p>
+        <p class="loading">Calculating estimated fare...</p>
       }
 
       @if (fareError()) {
         <p class="error">{{ fareError() }}</p>
       }
 
-      @if (fare()) {
+      @if (fare(); as f) {
         <section class="fare-card">
           <h2>Fare Estimate</h2>
 
           <div class="fare-row">
             <span>Distance</span>
-            <strong>
-              {{ fare()!.distanceKm | number:'1.2-2' }} km
-            </strong>
+            <strong>{{ f.distanceKm | number:'1.2-2' }} km</strong>
           </div>
 
           <div class="fare-row">
             <span>Estimated Duration</span>
-            <strong>
-              {{ fare()!.durationMinutes | number:'1.2-2' }} min
-            </strong>
+            <strong>{{ f.durationMinutes | number:'1.2-2' }} min</strong>
           </div>
 
           <hr />
 
           <div class="fare-row">
             <span>Base Fare</span>
-            <strong>
-              ₹{{ fare()!.baseFare | number:'1.2-2' }}
-            </strong>
+            <strong>₹{{ f.baseFare | number:'1.2-2' }}</strong>
           </div>
 
           <div class="fare-row">
             <span>Distance Fare</span>
-            <strong>
-              ₹{{ fare()!.distanceFare | number:'1.2-2' }}
-            </strong>
+            <strong>₹{{ f.distanceFare | number:'1.2-2' }}</strong>
           </div>
 
           <div class="fare-row">
             <span>Time Fare</span>
-            <strong>
-              ₹{{ fare()!.timeFare | number:'1.2-2' }}
-            </strong>
+            <strong>₹{{ f.timeFare | number:'1.2-2' }}</strong>
           </div>
 
           <hr />
 
           <div class="fare-row total">
             <span>Total Estimated Fare</span>
-            <strong>
-              ₹{{ fare()!.totalFare | number:'1.2-2' }}
-            </strong>
+            <strong>₹{{ f.totalFare | number:'1.2-2' }}</strong>
           </div>
 
           <p class="note">
@@ -192,7 +184,6 @@ type RideType = 'SOLO' | 'SHARED';
         <h2>Book Your Ride</h2>
 
         <label for="rideType">Choose ride type</label>
-
         <select
           id="rideType"
           name="rideType"
@@ -212,7 +203,7 @@ type RideType = 'SOLO' | 'SHARED';
             !pickupCoordinates ||
             !dropCoordinates ||
             !fare() ||
-            !!fareLoading() ||
+            fareLoading() ||
             !!rideRequestResult()
           "
         >
@@ -232,56 +223,22 @@ type RideType = 'SOLO' | 'SHARED';
         @if (rideRequestResult(); as result) {
           <div class="ride-result">
             <h3>Ride Request Submitted</h3>
-
-            <p>
-              <strong>Ride ID:</strong>
-              {{ result.ride.id }}
-            </p>
-
-            <p>
-              <strong>Status:</strong>
-              {{ result.ride.status }}
-            </p>
-
-            <p>
-              <strong>Ride type:</strong>
-              {{ result.ride.rideType }}
-            </p>
-
+            <p><strong>Ride ID:</strong> {{ result.ride.id }}</p>
+            <p><strong>Status:</strong> {{ result.ride.status }}</p>
+            <p><strong>Ride type:</strong> {{ result.ride.rideType }}</p>
             <p>
               <strong>Estimated fare:</strong>
               ₹{{ result.ride.estimatedFare | number:'1.2-2' }}
             </p>
-
             <p>
               <strong>Nearby drivers found:</strong>
               {{ result.nearbyDrivers.length }}
             </p>
 
-            @if (result.nearbyDrivers.length === 0) {
-              <p>
-                No nearby drivers are currently available.
-                Your request was submitted, but a driver has
-                not been assigned yet.
-              </p>
-            } @else {
-              <p>
-                Nearby drivers have been found. Your ride is
-                waiting for a driver to accept it.
-              </p>
-
-              <ul>
-                @for (
-                  driver of result.nearbyDrivers;
-                  track driver.driverId
-                ) {
-                  <li>
-                    Driver #{{ driver.driverId }}
-                    — {{ driver.distanceKm | number:'1.2-2' }} km away
-                  </li>
-                }
-              </ul>
-            }
+            <p>
+              Your ride is submitted. Driver tracking will begin
+              when a driver accepts and shares a location.
+            </p>
 
             <button
               type="button"
@@ -291,6 +248,64 @@ type RideType = 'SOLO' | 'SHARED';
               Plan Another Ride
             </button>
           </div>
+        }
+
+        @if (trackingRideId() !== null) {
+          <section class="tracking-card">
+            <h2>Live Driver Tracking</h2>
+            <p><strong>Ride ID:</strong> {{ trackingRideId() }}</p>
+
+            @if (trackingLoading()) {
+              <p>Checking driver assignment...</p>
+            }
+
+            @if (trackingError()) {
+              <p class="error">{{ trackingError() }}</p>
+            }
+
+            @if (trackingMessage()) {
+              <p>{{ trackingMessage() }}</p>
+            }
+
+            @if (driverTracking(); as tracking) {
+              <p>
+                <strong>Ride status:</strong>
+                {{ tracking.rideStatus }}
+              </p>
+
+              @if (tracking.driverId !== null) {
+                <p><strong>Driver ID:</strong> {{ tracking.driverId }}</p>
+              }
+
+              @if (
+                tracking.latitude !== null &&
+                tracking.longitude !== null
+              ) {
+                <p>
+                  <strong>Driver coordinates:</strong>
+                  {{ tracking.latitude | number:'1.5-5' }},
+                  {{ tracking.longitude | number:'1.5-5' }}
+                </p>
+
+                @if (tracking.locationUpdatedAt) {
+                  <p>
+                    <strong>Location last updated:</strong>
+                    {{ tracking.locationUpdatedAt }}
+                  </p>
+                }
+              }
+            }
+
+            @if (trackingStopped()) {
+              <button
+                type="button"
+                class="secondary-button"
+                (click)="stopTracking()"
+              >
+                Stop Tracking
+              </button>
+            }
+          </section>
         }
       </section>
     </section>
@@ -376,7 +391,8 @@ type RideType = 'SOLO' | 'SHARED';
     }
 
     .fare-card,
-    .ride-request-card {
+    .ride-request-card,
+    .tracking-card {
       margin-top: 24px;
       padding: 24px;
       border: 1px solid #ddd;
@@ -446,41 +462,36 @@ type RideType = 'SOLO' | 'SHARED';
       overflow-wrap: anywhere;
     }
 
-    .ride-result li {
-      margin: 8px 0;
+    .tracking-card {
+      background: #eff6ff;
+      overflow-wrap: anywhere;
     }
   `]
 })
 export class RiderMap implements AfterViewInit, OnDestroy {
-
   @ViewChild('mapContainer')
   mapContainer!: ElementRef<HTMLDivElement>;
 
-  private readonly locationService =
-    inject(LocationSearchService);
+  private readonly http = inject(HttpClient);
+  private readonly locationService = inject(LocationSearchService);
+  private readonly fareService = inject(FareService);
+  private readonly rideRequestService = inject(RideRequestService);
 
-  private readonly fareService =
-    inject(FareService);
-
-  private readonly rideRequestService =
-    inject(RideRequestService);
-
-  private readonly searchSubject =
-    new Subject<string>();
+  private readonly searchSubject = new Subject<string>();
 
   private searchSubscription?: Subscription;
   private fareSubscription?: Subscription;
+  private trackingSubscription?: Subscription;
 
   private map?: L.Map;
   private pickupMarker?: L.CircleMarker;
   private dropMarker?: L.CircleMarker;
+  private driverMarker?: L.CircleMarker;
 
-  private pickupCoordinates: L.LatLng | null = null;
-  private dropCoordinates: L.LatLng | null = null;
+  pickupCoordinates: L.LatLng | null = null;
+  dropCoordinates: L.LatLng | null = null;
 
-  readonly selectionMode =
-    signal<LocationMode>('pickup');
-
+  readonly selectionMode = signal<LocationMode>('pickup');
   readonly pickupText = signal('Not selected');
   readonly dropText = signal('Not selected');
 
@@ -496,8 +507,14 @@ export class RiderMap implements AfterViewInit, OnDestroy {
   readonly rideType = signal<RideType>('SOLO');
   readonly requestingRide = signal(false);
   readonly rideRequestError = signal<string | null>(null);
-  readonly rideRequestResult =
-    signal<RideRequestResponse | null>(null);
+  readonly rideRequestResult = signal<RideRequestResponse | null>(null);
+
+  readonly trackingRideId = signal<number | null>(null);
+  readonly driverTracking = signal<DriverTrackingResponse | null>(null);
+  readonly trackingLoading = signal(false);
+  readonly trackingError = signal<string | null>(null);
+  readonly trackingMessage = signal('');
+  readonly trackingStopped = signal(false);
 
   constructor() {
     this.searchSubscription = this.searchSubject.pipe(
@@ -514,9 +531,7 @@ export class RiderMap implements AfterViewInit, OnDestroy {
 
         return this.locationService.search(query).pipe(
           catchError(() => {
-            this.searchError.set(
-              'Unable to search locations.'
-            );
+            this.searchError.set('Unable to search locations.');
             return of([] as LocationResult[]);
           })
         );
@@ -528,9 +543,8 @@ export class RiderMap implements AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit(): void {
-    this.map = L.map(
-      this.mapContainer.nativeElement
-    ).setView([18.5204, 73.8567], 12);
+    this.map = L.map(this.mapContainer.nativeElement)
+      .setView([18.5204, 73.8567], 12);
 
     L.tileLayer(
       'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -540,12 +554,9 @@ export class RiderMap implements AfterViewInit, OnDestroy {
       }
     ).addTo(this.map);
 
-    this.map.on(
-      'click',
-      (event: L.LeafletMouseEvent) => {
-        this.selectLocation(event.latlng);
-      }
-    );
+    this.map.on('click', (event: L.LeafletMouseEvent) => {
+      this.selectLocation(event.latlng);
+    });
   }
 
   onSearchChange(query: string): void {
@@ -564,15 +575,11 @@ export class RiderMap implements AfterViewInit, OnDestroy {
     const latitude = Number(result.lat);
     const longitude = Number(result.lon);
 
-    if (
-      !Number.isFinite(latitude) ||
-      !Number.isFinite(longitude)
-    ) {
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
       return;
     }
 
     const location = L.latLng(latitude, longitude);
-
     this.selectLocation(location, result.display_name);
     this.map?.setView(location, 15);
 
@@ -581,18 +588,15 @@ export class RiderMap implements AfterViewInit, OnDestroy {
     this.searchSubject.next('');
   }
 
-  private selectLocation(
-    location: L.LatLng,
-    label?: string
-  ): void {
+  private selectLocation(location: L.LatLng, label?: string): void {
     if (!this.map) return;
 
     const text = label ??
       `${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}`;
 
-    // A changed route invalidates a previous request result.
     this.rideRequestResult.set(null);
     this.rideRequestError.set(null);
+    this.stopTracking();
 
     if (this.selectionMode() === 'pickup') {
       this.pickupMarker?.remove();
@@ -631,10 +635,7 @@ export class RiderMap implements AfterViewInit, OnDestroy {
     this.fareLoading.set(false);
     this.rideRequestError.set(null);
 
-    if (
-      !this.pickupCoordinates ||
-      !this.dropCoordinates
-    ) {
+    if (!this.pickupCoordinates || !this.dropCoordinates) {
       return;
     }
 
@@ -658,7 +659,6 @@ export class RiderMap implements AfterViewInit, OnDestroy {
               ? 'You do not have permission to estimate fares.'
               : 'Unable to calculate fare. Please try again.'
         );
-
         this.fareLoading.set(false);
       }
     });
@@ -671,9 +671,7 @@ export class RiderMap implements AfterViewInit, OnDestroy {
   }
 
   requestRide(): void {
-    if (this.requestingRide()) {
-      return;
-    }
+    if (this.requestingRide()) return;
 
     if (!this.pickupCoordinates || !this.dropCoordinates) {
       this.rideRequestError.set(
@@ -689,9 +687,7 @@ export class RiderMap implements AfterViewInit, OnDestroy {
       return;
     }
 
-    if (this.rideRequestResult()) {
-      return;
-    }
+    if (this.rideRequestResult()) return;
 
     this.requestingRide.set(true);
     this.rideRequestError.set(null);
@@ -708,10 +704,10 @@ export class RiderMap implements AfterViewInit, OnDestroy {
       next: response => {
         this.rideRequestResult.set(response);
         this.requestingRide.set(false);
+        this.startTracking(response.ride.id);
       },
       error: err => {
         this.requestingRide.set(false);
-
         this.rideRequestError.set(
           err.status === 401
             ? 'Your session has expired. Please log in again.'
@@ -725,7 +721,120 @@ export class RiderMap implements AfterViewInit, OnDestroy {
     });
   }
 
+  private startTracking(rideId: number): void {
+    this.stopTracking();
+
+    this.trackingRideId.set(rideId);
+    this.driverTracking.set(null);
+    this.trackingError.set(null);
+    this.trackingMessage.set('Waiting for driver assignment...');
+    this.trackingStopped.set(false);
+    this.trackingLoading.set(true);
+
+    this.trackingSubscription = interval(5000).pipe(
+      startWith(0),
+      switchMap(() =>
+        this.http.get<DriverTrackingResponse>(
+          `${environment.apiUrl}/rider/rides/${rideId}/driver-location`
+        ).pipe(
+          catchError((error: HttpErrorResponse) => {
+            this.trackingError.set(
+              error.status === 401
+                ? 'Your session has expired. Please log in again.'
+                : error.status === 403
+                  ? 'You are not authorized to track this ride.'
+                  : error.status === 404
+                    ? 'Ride not found.'
+                    : 'Unable to retrieve driver location. Retrying...'
+            );
+            return of(null);
+          })
+        )
+      )
+    ).subscribe(tracking => {
+      this.trackingLoading.set(false);
+
+      if (!tracking) return;
+
+      this.trackingError.set(null);
+      this.driverTracking.set(tracking);
+
+      if (
+        tracking.latitude !== null &&
+        tracking.longitude !== null &&
+        Number.isFinite(tracking.latitude) &&
+        Number.isFinite(tracking.longitude)
+      ) {
+        this.updateDriverMarker(
+          tracking.latitude,
+          tracking.longitude
+        );
+
+        this.trackingMessage.set('Driver location is updating automatically.');
+      } else if (tracking.rideStatus === 'REQUESTED') {
+        this.trackingMessage.set('Waiting for a driver to accept your ride.');
+      } else if (tracking.rideStatus === 'COMPLETED') {
+        this.trackingMessage.set('Your ride is completed.');
+      } else if (
+        tracking.rideStatus === 'REJECTED' ||
+        tracking.rideStatus === 'CANCELLED'
+      ) {
+        this.trackingMessage.set('This ride is no longer active.');
+      } else {
+        this.trackingMessage.set(
+          'Driver assigned. Waiting for the first location update.'
+        );
+      }
+
+      if (
+        ['COMPLETED', 'REJECTED', 'CANCELLED'].includes(
+          tracking.rideStatus
+        )
+      ) {
+        this.trackingStopped.set(true);
+        this.trackingSubscription?.unsubscribe();
+        this.trackingSubscription = undefined;
+      }
+    });
+  }
+
+  private updateDriverMarker(latitude: number, longitude: number): void {
+    if (!this.map) return;
+
+    const location = L.latLng(latitude, longitude);
+
+    if (!this.driverMarker) {
+      this.driverMarker = L.circleMarker(location, {
+        radius: 10,
+        color: '#1d4ed8',
+        fillColor: '#3b82f6',
+        fillOpacity: 1,
+        weight: 3
+      }).addTo(this.map);
+
+      this.driverMarker.bindTooltip('Driver location');
+    } else {
+      this.driverMarker.setLatLng(location);
+    }
+  }
+
+  stopTracking(): void {
+    this.trackingSubscription?.unsubscribe();
+    this.trackingSubscription = undefined;
+
+    this.driverMarker?.remove();
+    this.driverMarker = undefined;
+
+    this.trackingRideId.set(null);
+    this.driverTracking.set(null);
+    this.trackingLoading.set(false);
+    this.trackingError.set(null);
+    this.trackingMessage.set('');
+    this.trackingStopped.set(false);
+  }
+
   prepareAnotherRide(): void {
+    this.stopTracking();
     this.rideRequestResult.set(null);
     this.rideRequestError.set(null);
     this.rideType.set('SOLO');
@@ -734,6 +843,7 @@ export class RiderMap implements AfterViewInit, OnDestroy {
   ngOnDestroy(): void {
     this.searchSubscription?.unsubscribe();
     this.fareSubscription?.unsubscribe();
+    this.trackingSubscription?.unsubscribe();
     this.searchSubject.complete();
     this.map?.remove();
   }

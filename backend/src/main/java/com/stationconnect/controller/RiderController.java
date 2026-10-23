@@ -1,12 +1,14 @@
 
 package com.stationconnect.controller;
 
+import com.stationconnect.dto.DriverTrackingResponse;
 import com.stationconnect.dto.RideRequest;
 import com.stationconnect.dto.RideRequestResponse;
 import com.stationconnect.dto.RiderProfileUpdateRequest;
 import com.stationconnect.entity.RiderProfile;
 import com.stationconnect.service.RiderService;
 import com.stationconnect.service.RideRequestService;
+import com.stationconnect.service.RideTrackingService;
 
 import jakarta.validation.Valid;
 import java.security.Principal;
@@ -20,12 +22,15 @@ public class RiderController {
 
     private final RiderService riderService;
     private final RideRequestService rideRequestService;
+    private final RideTrackingService rideTrackingService;
 
     public RiderController(
             RiderService riderService,
-            RideRequestService rideRequestService) {
+            RideRequestService rideRequestService,
+            RideTrackingService rideTrackingService) {
         this.riderService = riderService;
         this.rideRequestService = rideRequestService;
+        this.rideTrackingService = rideTrackingService;
     }
 
     @GetMapping("/profile")
@@ -48,5 +53,13 @@ public class RiderController {
             @Valid @RequestBody RideRequest request) {
         return rideRequestService.requestRide(
                 principal.getName(), request);
+    }
+
+    @GetMapping("/rides/{rideId}/driver-location")
+    public DriverTrackingResponse getDriverLocation(
+            Principal principal,
+            @PathVariable Long rideId) {
+        return rideTrackingService.getDriverLocation(
+                principal.getName(), rideId);
     }
 }
