@@ -46,31 +46,48 @@ public class SecurityConfig {
                         );
 
         http
+            // REST API security configuration
             .csrf(csrf -> csrf.disable())
             .cors(cors -> {})
             .formLogin(form -> form.disable())
             .httpBasic(basic -> basic.disable())
+
+            // Use stateless JWT authentication
             .sessionManagement(session -> session
                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             )
+
+            // Handle unauthorized and forbidden requests
             .exceptionHandling(exceptions -> exceptions
                 .authenticationEntryPoint(unauthorized)
                 .accessDeniedHandler(forbidden)
             )
+
+            // Define endpoint permissions
             .authorizeHttpRequests(auth -> auth
 
-                // Allow browser preflight requests
+                // Allow browser CORS preflight requests
                 .requestMatchers(HttpMethod.OPTIONS, "/**")
                     .permitAll()
 
                 // Public endpoints
-                .requestMatchers("/error").permitAll()
+                .requestMatchers("/error")
+                    .permitAll()
+
                 .requestMatchers(
                     HttpMethod.POST,
                     "/api/auth/register",
                     "/api/auth/login"
                 ).permitAll()
-                .requestMatchers("/api/health").permitAll()
+
+                .requestMatchers("/api/health")
+                    .permitAll()
+
+                // WebSocket handshake.
+                // The STOMP CONNECT frame must be authenticated
+                // by StompJwtChannelInterceptor.
+                .requestMatchers("/ws", "/ws/**")
+                    .permitAll()
 
                 // Admin endpoints
                 .requestMatchers("/api/admin/**")
@@ -85,8 +102,11 @@ public class SecurityConfig {
                     .hasAnyRole("RIDER", "ADMIN")
 
                 // All other endpoints require authentication
-                .anyRequest().authenticated()
+                .anyRequest()
+                    .authenticated()
             )
+
+            // Apply the JWT filter to HTTP requests
             .addFilterBefore(
                 jwtFilter,
                 UsernamePasswordAuthenticationFilter.class
@@ -100,27 +120,30 @@ public class SecurityConfig {
 
         CorsConfiguration config = new CorsConfiguration();
 
+        // Angular development server
         config.setAllowedOrigins(
-                List.of("http://localhost:4200")
+            List.of("http://localhost:4200")
         );
 
+        // Supported HTTP methods
         config.setAllowedMethods(
-                List.of(
-                    "GET",
-                    "POST",
-                    "PUT",
-                    "PATCH",
-                    "DELETE",
-                    "OPTIONS"
-                )
+            List.of(
+                "GET",
+                "POST",
+                "PUT",
+                "PATCH",
+                "DELETE",
+                "OPTIONS"
+            )
         );
 
+        // Supported request headers
         config.setAllowedHeaders(
-                List.of(
-                    "Authorization",
-                    "Content-Type",
-                    "Accept"
-                )
+            List.of(
+                "Authorization",
+                "Content-Type",
+                "Accept"
+            )
         );
 
         config.setAllowCredentials(false);

@@ -1,26 +1,25 @@
 
 package com.stationconnect.controller;
 
-import com.stationconnect.entity.DriverProfile;
-import com.stationconnect.service.DriverService;
-import java.security.Principal;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-
 import com.stationconnect.dto.ApiResponse;
 import com.stationconnect.dto.DriverLocationRequest;
 import com.stationconnect.dto.DriverProfileRequest;
+import com.stationconnect.dto.DriverStatusRequest;
 import com.stationconnect.entity.DriverLocation;
+import com.stationconnect.entity.DriverProfile;
+import com.stationconnect.service.DriverService;
 import jakarta.validation.Valid;
+import java.security.Principal;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import com.stationconnect.dto.DriverStatusRequest;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/driver")
@@ -36,43 +35,47 @@ public class DriverController {
     public DriverProfile getProfile(Principal principal) {
         return driverService.getProfile(principal.getName());
     }
-    
-@PutMapping("/location")
-@ResponseStatus(HttpStatus.OK)
-public DriverLocation updateLocation(
-        Principal principal,
-        @Valid @RequestBody DriverLocationRequest request) {
-    return driverService.updateLocation(
-            principal.getName(),
-            request.latitude(),
-            request.longitude());
-}
 
-@GetMapping("/location")
-public DriverLocation getLocation(Principal principal) {
-    return driverService.getLocation(principal.getName());
-}
+    @PutMapping("/location")
+    @ResponseStatus(HttpStatus.OK)
+    public DriverLocation updateLocation(
+            Principal principal,
+            @Valid @RequestBody DriverLocationRequest request) {
 
-@PatchMapping("/status")
-public DriverProfile updateStatus(
-        Principal principal,
-        @Valid @RequestBody DriverStatusRequest request) {
-    return driverService.updateOnlineStatus(
-            principal.getName(), request.online());
-}
+        return driverService.updateLocation(
+                principal.getName(),
+                request.latitude(),
+                request.longitude());
+    }
 
-@PostMapping("/profile")
-public ResponseEntity<ApiResponse<DriverProfile>> createProfile(
-        Principal principal,
-        @Valid @RequestBody DriverProfileRequest request) {
+    @GetMapping("/location")
+    public DriverLocation getLocation(Principal principal) {
+        return driverService.getLocation(principal.getName());
+    }
 
-    DriverProfile profile = driverService.createProfile(
-            principal.getName(),
-            request
-    );
+    @PatchMapping("/status")
+    public DriverProfile updateStatus(
+            Principal principal,
+            @Valid @RequestBody DriverStatusRequest request) {
 
-    return ResponseEntity
-            .status(HttpStatus.CREATED)
-            .body(ApiResponse.ok("Driver profile created successfully", profile));
-}
+        return driverService.updateOnlineStatus(
+                principal.getName(),
+                request.online());
+    }
+
+    @PostMapping("/profile")
+    public ResponseEntity<ApiResponse<DriverProfile>> createProfile(
+            Principal principal,
+            @Valid @RequestBody DriverProfileRequest request) {
+
+        DriverProfile profile = driverService.createProfile(
+                principal.getName(),
+                request);
+
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(ApiResponse.ok(
+                        "Driver profile created successfully",
+                        profile));
+    }
 }
