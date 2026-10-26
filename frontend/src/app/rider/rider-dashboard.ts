@@ -1,12 +1,19 @@
+import {
+  Component,
+  OnInit,
+  inject,
+  signal
+} from '@angular/core';
 
-import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { AuthService } from '../core/auth.service';
+
 import {
   RiderProfile,
   RiderProfileService
 } from './rider-profile.service';
+
 import { RiderMap } from './rider-map';
 
 @Component({
@@ -35,15 +42,22 @@ import { RiderMap } from './rider-map';
           @if (!editing()) {
             <p>
               <strong>Default Pickup:</strong>
-              {{ profile()!.defaultPickupLocation ?? 'Not set' }}
+              {{
+                profile()!.defaultPickupLocation ?? 'Not set'
+              }}
             </p>
 
             <p>
               <strong>Payment Method:</strong>
-              {{ profile()!.preferredPaymentMethod ?? 'Not set' }}
+              {{
+                profile()!.preferredPaymentMethod ?? 'Not set'
+              }}
             </p>
 
-            <button type="button" (click)="startEditing()">
+            <button
+              type="button"
+              (click)="startEditing()"
+            >
               Edit Profile
             </button>
           } @else {
@@ -75,7 +89,10 @@ import { RiderMap } from './rider-map';
                   [(ngModel)]="paymentMethod"
                   required
                 >
-                  <option value="">Select payment method</option>
+                  <option value="">
+                    Select payment method
+                  </option>
+
                   <option value="UPI">UPI</option>
                   <option value="CASH">Cash</option>
                   <option value="CARD">Card</option>
@@ -85,11 +102,17 @@ import { RiderMap } from './rider-map';
               <div class="actions">
                 <button
                   type="submit"
-                  [disabled]="saving() ||
+                  [disabled]="
+                    saving() ||
                     !pickupLocation.trim() ||
-                    !paymentMethod"
+                    !paymentMethod
+                  "
                 >
-                  {{ saving() ? 'Saving...' : 'Save Changes' }}
+                  {{
+                    saving()
+                      ? 'Saving...'
+                      : 'Save Changes'
+                  }}
                 </button>
 
                 <button
@@ -112,7 +135,6 @@ import { RiderMap } from './rider-map';
           }
         </section>
 
-        <!-- Leaflet Route Selection -->
         <app-rider-map />
       }
 
@@ -151,7 +173,8 @@ import { RiderMap } from './rider-map';
       font-weight: bold;
     }
 
-    input, select {
+    input,
+    select {
       padding: 10px;
       border: 1px solid #bbb;
       border-radius: 6px;
@@ -192,8 +215,8 @@ import { RiderMap } from './rider-map';
   `]
 })
 export class RiderDashboard implements OnInit {
-
   readonly auth = inject(AuthService);
+
   private readonly riderService = inject(RiderProfileService);
 
   readonly profile = signal<RiderProfile | null>(null);
@@ -213,6 +236,7 @@ export class RiderDashboard implements OnInit {
         this.profile.set(profile);
         this.loading.set(false);
       },
+
       error: (err) => {
         this.error.set(
           err.status === 401
@@ -230,7 +254,9 @@ export class RiderDashboard implements OnInit {
   startEditing(): void {
     const currentProfile = this.profile();
 
-    if (!currentProfile) return;
+    if (!currentProfile) {
+      return;
+    }
 
     this.pickupLocation =
       currentProfile.defaultPickupLocation ?? '';
@@ -249,7 +275,9 @@ export class RiderDashboard implements OnInit {
   }
 
   saveProfile(): void {
-    if (this.saving()) return;
+    if (this.saving()) {
+      return;
+    }
 
     const pickup = this.pickupLocation.trim();
 
@@ -270,8 +298,12 @@ export class RiderDashboard implements OnInit {
         this.profile.set(updatedProfile);
         this.editing.set(false);
         this.saving.set(false);
-        this.success.set('Profile updated successfully!');
+
+        this.success.set(
+          'Profile updated successfully!'
+        );
       },
+
       error: (err) => {
         this.error.set(
           err.status === 401

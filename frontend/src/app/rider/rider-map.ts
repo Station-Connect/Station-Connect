@@ -1,4 +1,3 @@
-
 import {
   Component,
   AfterViewInit,
@@ -10,7 +9,7 @@ import {
 } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
-import { DecimalPipe } from '@angular/common';
+import { DecimalPipe, DatePipe } from '@angular/common';
 import * as L from 'leaflet';
 
 import {
@@ -25,7 +24,11 @@ import {
   startWith
 } from 'rxjs';
 
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import {
+  HttpClient,
+  HttpErrorResponse
+} from '@angular/common/http';
+
 import { environment } from '../../environments/environment';
 
 import {
@@ -40,7 +43,8 @@ import {
 
 import {
   RideRequestService,
-  RideRequestResponse
+  RideRequestResponse,
+  Ride
 } from './ride-request.service';
 
 type LocationMode = 'pickup' | 'drop';
@@ -58,14 +62,16 @@ interface DriverTrackingResponse {
 @Component({
   selector: 'app-rider-map',
   standalone: true,
-  imports: [FormsModule, DecimalPipe],
+  imports: [FormsModule, DecimalPipe, DatePipe],
   template: `
     <section class="map-section">
       <h2>Select Your Route</h2>
+
       <p>Search for an address or click on the map.</p>
 
       <div class="search-group">
         <label for="locationSearch">Search location</label>
+
         <input
           id="locationSearch"
           type="text"
@@ -124,8 +130,15 @@ interface DriverTrackingResponse {
       <div #mapContainer class="map"></div>
 
       <div class="locations">
-        <p><strong>Pickup:</strong> {{ pickupText() }}</p>
-        <p><strong>Drop:</strong> {{ dropText() }}</p>
+        <p>
+          <strong>Pickup:</strong>
+          {{ pickupText() }}
+        </p>
+
+        <p>
+          <strong>Drop:</strong>
+          {{ dropText() }}
+        </p>
       </div>
 
       @if (fareLoading()) {
@@ -142,36 +155,48 @@ interface DriverTrackingResponse {
 
           <div class="fare-row">
             <span>Distance</span>
-            <strong>{{ f.distanceKm | number:'1.2-2' }} km</strong>
+            <strong>
+              {{ f.distanceKm | number:'1.2-2' }} km
+            </strong>
           </div>
 
           <div class="fare-row">
             <span>Estimated Duration</span>
-            <strong>{{ f.durationMinutes | number:'1.2-2' }} min</strong>
+            <strong>
+              {{ f.durationMinutes | number:'1.2-2' }} min
+            </strong>
           </div>
 
           <hr />
 
           <div class="fare-row">
             <span>Base Fare</span>
-            <strong>₹{{ f.baseFare | number:'1.2-2' }}</strong>
+            <strong>
+              ₹{{ f.baseFare | number:'1.2-2' }}
+            </strong>
           </div>
 
           <div class="fare-row">
             <span>Distance Fare</span>
-            <strong>₹{{ f.distanceFare | number:'1.2-2' }}</strong>
+            <strong>
+              ₹{{ f.distanceFare | number:'1.2-2' }}
+            </strong>
           </div>
 
           <div class="fare-row">
             <span>Time Fare</span>
-            <strong>₹{{ f.timeFare | number:'1.2-2' }}</strong>
+            <strong>
+              ₹{{ f.timeFare | number:'1.2-2' }}
+            </strong>
           </div>
 
           <hr />
 
           <div class="fare-row total">
             <span>Total Estimated Fare</span>
-            <strong>₹{{ f.totalFare | number:'1.2-2' }}</strong>
+            <strong>
+              ₹{{ f.totalFare | number:'1.2-2' }}
+            </strong>
           </div>
 
           <p class="note">
@@ -184,6 +209,7 @@ interface DriverTrackingResponse {
         <h2>Book Your Ride</h2>
 
         <label for="rideType">Choose ride type</label>
+
         <select
           id="rideType"
           name="rideType"
@@ -223,13 +249,27 @@ interface DriverTrackingResponse {
         @if (rideRequestResult(); as result) {
           <div class="ride-result">
             <h3>Ride Request Submitted</h3>
-            <p><strong>Ride ID:</strong> {{ result.ride.id }}</p>
-            <p><strong>Status:</strong> {{ result.ride.status }}</p>
-            <p><strong>Ride type:</strong> {{ result.ride.rideType }}</p>
+
+            <p>
+              <strong>Ride ID:</strong>
+              {{ result.ride.id }}
+            </p>
+
+            <p>
+              <strong>Status:</strong>
+              {{ result.ride.status }}
+            </p>
+
+            <p>
+              <strong>Ride type:</strong>
+              {{ result.ride.rideType }}
+            </p>
+
             <p>
               <strong>Estimated fare:</strong>
               ₹{{ result.ride.estimatedFare | number:'1.2-2' }}
             </p>
+
             <p>
               <strong>Nearby drivers found:</strong>
               {{ result.nearbyDrivers.length }}
@@ -248,12 +288,95 @@ interface DriverTrackingResponse {
               Plan Another Ride
             </button>
           </div>
+
+          @let ride = latestRide() ?? result.ride;
+
+          <section class="trip-summary">
+            <h3>Trip Summary</h3>
+
+            <p>
+              <strong>Ride ID:</strong>
+              {{ ride.id }}
+            </p>
+
+            <p>
+              <strong>Pickup:</strong>
+              {{ ride.pickupAddress }}
+            </p>
+
+            <p>
+              <strong>Drop-off:</strong>
+              {{ ride.dropAddress }}
+            </p>
+
+            <p>
+              <strong>Ride type:</strong>
+              {{ ride.rideType }}
+            </p>
+
+            <p>
+              <strong>Status:</strong>
+              <span
+                class="status-badge"
+                [class.status-completed]="ride.status === 'COMPLETED'"
+                [class.status-cancelled]="
+                  ride.status === 'CANCELLED' ||
+                  ride.status === 'REJECTED'
+                "
+              >
+                {{ ride.status }}
+              </span>
+            </p>
+
+            <p>
+              <strong>Estimated fare:</strong>
+              ₹{{ ride.estimatedFare | number:'1.2-2' }}
+            </p>
+
+            @if (ride.status === 'COMPLETED') {
+              <div class="final-fare-card">
+                <p class="final-fare-label">
+                  Final Fare
+                </p>
+
+                <p class="final-fare-amount">
+                  ₹{{
+                    (ride.finalFare ?? ride.estimatedFare)
+                      | number:'1.2-2'
+                  }}
+                </p>
+
+                @if (ride.completedAt) {
+                  <p class="completed-time">
+                    Completed:
+                    {{ ride.completedAt | date:'medium' }}
+                  </p>
+                }
+              </div>
+            } @else if (
+              ride.status !== 'CANCELLED' &&
+              ride.status !== 'REJECTED'
+            ) {
+              <p class="trip-note">
+                Your trip details will refresh automatically.
+              </p>
+            }
+          </section>
         }
 
-        @if (trackingRideId() !== null) {
+        @if (
+  trackingRideId() !== null &&
+  !['COMPLETED', 'CANCELLED', 'REJECTED'].includes(
+    driverTracking()?.rideStatus ?? ''
+  )
+) {
           <section class="tracking-card">
             <h2>Live Driver Tracking</h2>
-            <p><strong>Ride ID:</strong> {{ trackingRideId() }}</p>
+
+            <p>
+              <strong>Ride ID:</strong>
+              {{ trackingRideId() }}
+            </p>
 
             @if (trackingLoading()) {
               <p>Checking driver assignment...</p>
@@ -274,7 +397,10 @@ interface DriverTrackingResponse {
               </p>
 
               @if (tracking.driverId !== null) {
-                <p><strong>Driver ID:</strong> {{ tracking.driverId }}</p>
+                <p>
+                  <strong>Driver ID:</strong>
+                  {{ tracking.driverId }}
+                </p>
               }
 
               @if (
@@ -290,7 +416,7 @@ interface DriverTrackingResponse {
                 @if (tracking.locationUpdatedAt) {
                   <p>
                     <strong>Location last updated:</strong>
-                    {{ tracking.locationUpdatedAt }}
+                    {{ tracking.locationUpdatedAt | date:'medium' }}
                   </p>
                 }
               }
@@ -462,6 +588,70 @@ interface DriverTrackingResponse {
       overflow-wrap: anywhere;
     }
 
+    .trip-summary {
+      margin-top: 18px;
+      padding: 20px;
+      border: 1px solid #cbd5e1;
+      border-radius: 12px;
+      background: white;
+      overflow-wrap: anywhere;
+    }
+
+    .trip-summary h3 {
+      margin-top: 0;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #dbeafe;
+      color: #1d4ed8;
+      font-size: 13px;
+      font-weight: bold;
+    }
+
+    .status-completed {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .status-cancelled {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .final-fare-card {
+      margin-top: 18px;
+      padding: 18px;
+      border: 1px solid #86efac;
+      border-radius: 10px;
+      background: #f0fdf4;
+    }
+
+    .final-fare-label {
+      margin: 0;
+      color: #166534;
+      font-weight: bold;
+    }
+
+    .final-fare-amount {
+      margin: 8px 0;
+      color: #15803d;
+      font-size: 28px;
+      font-weight: bold;
+    }
+
+    .completed-time {
+      color: #166534;
+      font-size: 13px;
+    }
+
+    .trip-note {
+      color: #64748b;
+      font-size: 13px;
+    }
+
     .tracking-card {
       background: #eff6ff;
       overflow-wrap: anywhere;
@@ -482,6 +672,7 @@ export class RiderMap implements AfterViewInit, OnDestroy {
   private searchSubscription?: Subscription;
   private fareSubscription?: Subscription;
   private trackingSubscription?: Subscription;
+  private rideDetailsSubscription?: Subscription;
 
   private map?: L.Map;
   private pickupMarker?: L.CircleMarker;
@@ -492,6 +683,7 @@ export class RiderMap implements AfterViewInit, OnDestroy {
   dropCoordinates: L.LatLng | null = null;
 
   readonly selectionMode = signal<LocationMode>('pickup');
+
   readonly pickupText = signal('Not selected');
   readonly dropText = signal('Not selected');
 
@@ -507,10 +699,15 @@ export class RiderMap implements AfterViewInit, OnDestroy {
   readonly rideType = signal<RideType>('SOLO');
   readonly requestingRide = signal(false);
   readonly rideRequestError = signal<string | null>(null);
-  readonly rideRequestResult = signal<RideRequestResponse | null>(null);
+  readonly rideRequestResult =
+    signal<RideRequestResponse | null>(null);
+
+  readonly latestRide = signal<Ride | null>(null);
 
   readonly trackingRideId = signal<number | null>(null);
-  readonly driverTracking = signal<DriverTrackingResponse | null>(null);
+  readonly driverTracking =
+    signal<DriverTrackingResponse | null>(null);
+
   readonly trackingLoading = signal(false);
   readonly trackingError = signal<string | null>(null);
   readonly trackingMessage = signal('');
@@ -531,7 +728,10 @@ export class RiderMap implements AfterViewInit, OnDestroy {
 
         return this.locationService.search(query).pipe(
           catchError(() => {
-            this.searchError.set('Unable to search locations.');
+            this.searchError.set(
+              'Unable to search locations.'
+            );
+
             return of([] as LocationResult[]);
           })
         );
@@ -554,9 +754,12 @@ export class RiderMap implements AfterViewInit, OnDestroy {
       }
     ).addTo(this.map);
 
-    this.map.on('click', (event: L.LeafletMouseEvent) => {
-      this.selectLocation(event.latlng);
-    });
+    this.map.on(
+      'click',
+      (event: L.LeafletMouseEvent) => {
+        this.selectLocation(event.latlng);
+      }
+    );
   }
 
   onSearchChange(query: string): void {
@@ -575,11 +778,15 @@ export class RiderMap implements AfterViewInit, OnDestroy {
     const latitude = Number(result.lat);
     const longitude = Number(result.lon);
 
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    if (
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude)
+    ) {
       return;
     }
 
     const location = L.latLng(latitude, longitude);
+
     this.selectLocation(location, result.display_name);
     this.map?.setView(location, 15);
 
@@ -588,14 +795,21 @@ export class RiderMap implements AfterViewInit, OnDestroy {
     this.searchSubject.next('');
   }
 
-  private selectLocation(location: L.LatLng, label?: string): void {
-    if (!this.map) return;
+  private selectLocation(
+    location: L.LatLng,
+    label?: string
+  ): void {
+    if (!this.map) {
+      return;
+    }
 
     const text = label ??
       `${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}`;
 
     this.rideRequestResult.set(null);
+    this.latestRide.set(null);
     this.rideRequestError.set(null);
+
     this.stopTracking();
 
     if (this.selectionMode() === 'pickup') {
@@ -630,12 +844,16 @@ export class RiderMap implements AfterViewInit, OnDestroy {
 
   private calculateFare(): void {
     this.fareSubscription?.unsubscribe();
+
     this.fare.set(null);
     this.fareError.set(null);
     this.fareLoading.set(false);
     this.rideRequestError.set(null);
 
-    if (!this.pickupCoordinates || !this.dropCoordinates) {
+    if (
+      !this.pickupCoordinates ||
+      !this.dropCoordinates
+    ) {
       return;
     }
 
@@ -651,6 +869,7 @@ export class RiderMap implements AfterViewInit, OnDestroy {
         this.fare.set(response);
         this.fareLoading.set(false);
       },
+
       error: err => {
         this.fareError.set(
           err.status === 401
@@ -659,6 +878,7 @@ export class RiderMap implements AfterViewInit, OnDestroy {
               ? 'You do not have permission to estimate fares.'
               : 'Unable to calculate fare. Please try again.'
         );
+
         this.fareLoading.set(false);
       }
     });
@@ -671,12 +891,18 @@ export class RiderMap implements AfterViewInit, OnDestroy {
   }
 
   requestRide(): void {
-    if (this.requestingRide()) return;
+    if (this.requestingRide()) {
+      return;
+    }
 
-    if (!this.pickupCoordinates || !this.dropCoordinates) {
+    if (
+      !this.pickupCoordinates ||
+      !this.dropCoordinates
+    ) {
       this.rideRequestError.set(
         'Please select both pickup and drop locations.'
       );
+
       return;
     }
 
@@ -684,10 +910,13 @@ export class RiderMap implements AfterViewInit, OnDestroy {
       this.rideRequestError.set(
         'Please wait until the fare estimate is available.'
       );
+
       return;
     }
 
-    if (this.rideRequestResult()) return;
+    if (this.rideRequestResult()) {
+      return;
+    }
 
     this.requestingRide.set(true);
     this.rideRequestError.set(null);
@@ -703,11 +932,15 @@ export class RiderMap implements AfterViewInit, OnDestroy {
     }).subscribe({
       next: response => {
         this.rideRequestResult.set(response);
+        this.latestRide.set(response.ride);
         this.requestingRide.set(false);
+
         this.startTracking(response.ride.id);
       },
+
       error: err => {
         this.requestingRide.set(false);
+
         this.rideRequestError.set(
           err.status === 401
             ? 'Your session has expired. Please log in again.'
@@ -721,18 +954,66 @@ export class RiderMap implements AfterViewInit, OnDestroy {
     });
   }
 
+  private startRideDetailsRefresh(rideId: number): void {
+    this.rideDetailsSubscription?.unsubscribe();
+
+    this.rideDetailsSubscription = interval(5000).pipe(
+      startWith(0),
+
+      switchMap(() =>
+        this.rideRequestService.getRide(rideId).pipe(
+          catchError((error: HttpErrorResponse) => {
+            this.rideRequestError.set(
+              error.status === 401
+                ? 'Your session has expired. Please log in again.'
+                : error.status === 403
+                  ? 'You are not authorized to view this ride.'
+                  : 'Unable to refresh trip details. Retrying...'
+            );
+
+            return of(null);
+          })
+        )
+      )
+    ).subscribe(ride => {
+      if (!ride) {
+        return;
+      }
+
+      this.latestRide.set(ride);
+      this.rideRequestError.set(null);
+
+      if (
+        ['COMPLETED', 'CANCELLED', 'REJECTED'].includes(
+          ride.status
+        )
+      ) {
+        this.rideDetailsSubscription?.unsubscribe();
+        this.rideDetailsSubscription = undefined;
+      }
+    });
+  }
+
   private startTracking(rideId: number): void {
     this.stopTracking();
+
+    this.latestRide.set(null);
+    this.startRideDetailsRefresh(rideId);
 
     this.trackingRideId.set(rideId);
     this.driverTracking.set(null);
     this.trackingError.set(null);
-    this.trackingMessage.set('Waiting for driver assignment...');
+
+    this.trackingMessage.set(
+      'Waiting for driver assignment...'
+    );
+
     this.trackingStopped.set(false);
     this.trackingLoading.set(true);
 
     this.trackingSubscription = interval(5000).pipe(
       startWith(0),
+
       switchMap(() =>
         this.http.get<DriverTrackingResponse>(
           `${environment.apiUrl}/rider/rides/${rideId}/driver-location`
@@ -747,6 +1028,7 @@ export class RiderMap implements AfterViewInit, OnDestroy {
                     ? 'Ride not found.'
                     : 'Unable to retrieve driver location. Retrying...'
             );
+
             return of(null);
           })
         )
@@ -754,7 +1036,9 @@ export class RiderMap implements AfterViewInit, OnDestroy {
     ).subscribe(tracking => {
       this.trackingLoading.set(false);
 
-      if (!tracking) return;
+      if (!tracking) {
+        return;
+      }
 
       this.trackingError.set(null);
       this.driverTracking.set(tracking);
@@ -770,16 +1054,24 @@ export class RiderMap implements AfterViewInit, OnDestroy {
           tracking.longitude
         );
 
-        this.trackingMessage.set('Driver location is updating automatically.');
+        this.trackingMessage.set(
+          'Driver location is updating automatically.'
+        );
       } else if (tracking.rideStatus === 'REQUESTED') {
-        this.trackingMessage.set('Waiting for a driver to accept your ride.');
+        this.trackingMessage.set(
+          'Waiting for a driver to accept your ride.'
+        );
       } else if (tracking.rideStatus === 'COMPLETED') {
-        this.trackingMessage.set('Your ride is completed.');
+        this.trackingMessage.set(
+          'Your ride is completed.'
+        );
       } else if (
         tracking.rideStatus === 'REJECTED' ||
         tracking.rideStatus === 'CANCELLED'
       ) {
-        this.trackingMessage.set('This ride is no longer active.');
+        this.trackingMessage.set(
+          'This ride is no longer active.'
+        );
       } else {
         this.trackingMessage.set(
           'Driver assigned. Waiting for the first location update.'
@@ -792,14 +1084,20 @@ export class RiderMap implements AfterViewInit, OnDestroy {
         )
       ) {
         this.trackingStopped.set(true);
+
         this.trackingSubscription?.unsubscribe();
         this.trackingSubscription = undefined;
       }
     });
   }
 
-  private updateDriverMarker(latitude: number, longitude: number): void {
-    if (!this.map) return;
+  private updateDriverMarker(
+    latitude: number,
+    longitude: number
+  ): void {
+    if (!this.map) {
+      return;
+    }
 
     const location = L.latLng(latitude, longitude);
 
@@ -822,6 +1120,9 @@ export class RiderMap implements AfterViewInit, OnDestroy {
     this.trackingSubscription?.unsubscribe();
     this.trackingSubscription = undefined;
 
+    this.rideDetailsSubscription?.unsubscribe();
+    this.rideDetailsSubscription = undefined;
+
     this.driverMarker?.remove();
     this.driverMarker = undefined;
 
@@ -835,7 +1136,9 @@ export class RiderMap implements AfterViewInit, OnDestroy {
 
   prepareAnotherRide(): void {
     this.stopTracking();
+
     this.rideRequestResult.set(null);
+    this.latestRide.set(null);
     this.rideRequestError.set(null);
     this.rideType.set('SOLO');
   }
@@ -844,6 +1147,8 @@ export class RiderMap implements AfterViewInit, OnDestroy {
     this.searchSubscription?.unsubscribe();
     this.fareSubscription?.unsubscribe();
     this.trackingSubscription?.unsubscribe();
+    this.rideDetailsSubscription?.unsubscribe();
+
     this.searchSubject.complete();
     this.map?.remove();
   }

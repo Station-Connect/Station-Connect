@@ -33,6 +33,7 @@ export interface Ride {
   estimatedFare: number;
   finalFare: number | null;
   requestedAt: string;
+  completedAt: string | null;
 }
 
 export interface RideRequestResponse {
@@ -40,7 +41,9 @@ export interface RideRequestResponse {
   nearbyDrivers: NearbyDriver[];
 }
 
-@Injectable({ providedIn: 'root' })
+@Injectable({
+  providedIn: 'root'
+})
 export class RideRequestService {
   private readonly http = inject(HttpClient);
 
@@ -52,6 +55,12 @@ export class RideRequestService {
     return this.http.post<RideRequestResponse>(
       this.url,
       request
+    );
+  }
+
+  getRide(rideId: number): Observable<Ride> {
+    return this.http.get<Ride>(
+      `${this.url}/${rideId}`
     );
   }
 }
