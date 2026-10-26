@@ -1,7 +1,7 @@
-
-import { Component, OnInit, inject, signal } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
+import { DatePipe } from '@angular/common';
+import { Component, OnInit, inject, signal } from '@angular/core';
 
 interface DriverProfile {
   userId: number;
@@ -40,6 +40,7 @@ interface DriverLocationResponse {
 
 @Component({
   selector: 'app-driver-dashboard',
+  imports:[DatePipe],
   standalone: true,
   template: `
     <main class="dashboard">
@@ -95,6 +96,7 @@ interface DriverLocationResponse {
           @if (statusError()) {
             <p class="error" role="alert">{{ statusError() }}</p>
           }
+          
 
           <hr />
 
@@ -250,6 +252,44 @@ interface DriverLocationResponse {
           }
         </section>
 
+        <section class="ride-section">
+  <div class="section-heading">
+    <h2>Completed Trips</h2>
+    <button
+      type="button"
+      [disabled]="ridesLoading()"
+      (click)="loadCompletedRides()"
+    >
+      Refresh
+    </button>
+  </div>
+
+  @if (completedRidesError()) {
+    <p class="error" role="alert">{{ completedRidesError() }}</p>
+  } @else if (completedRides().length === 0) {
+    <p>No completed trips yet.</p>
+  } @else {
+    <div class="ride-list">
+      @for (ride of completedRides(); track ride.id) {
+        <article class="ride-card">
+          <h3>Ride #{{ ride.id }}</h3>
+          <p><strong>Pickup:</strong> {{ ride.pickupAddress }}</p>
+          <p><strong>Drop-off:</strong> {{ ride.dropAddress }}</p>
+          <p><strong>Status:</strong> {{ ride.status }}</p>
+          <p>
+            <strong>Final fare:</strong>
+            ₹{{ ride.finalFare ?? ride.estimatedFare }}
+          </p>
+          <p>
+            <strong>Completed at:</strong>
+            {{ ride.completedAt ? (ride.completedAt | date:'medium') : 'Not available' }}
+          </p>
+        </article>
+      }
+    </div>
+  }
+</section>
+
         @if (rideMessage()) {
           <p class="success" role="status">{{ rideMessage() }}</p>
         }
@@ -367,6 +407,8 @@ export class DriverDashboard implements OnInit {
   readonly rideActionError = signal('');
   readonly rideMessage = signal('');
   readonly rideActionId = signal<number | null>(null);
+  readonly completedRides = signal<Ride[]>([]);
+  readonly completedRidesError = signal('');
 
   ngOnInit(): void {
     this.loadProfile();
@@ -623,4 +665,20 @@ export class DriverDashboard implements OnInit {
       },
     });
   }
+  loadCompletedRides(): void {
+  this.completedRidesError.set('');
+
+  this.http.get<Ride[]>(
+    `${environment.apiUrl}/driver/rides/completed`,
+  ).subscribe({
+    next: (rides) => {
+      this.completedRides.set(rides);
+    },
+    error: () => {
+      this.completedRidesError.set(
+        'Unable to load completed trips. Please try again.',
+      );
+    },
+  });
+}
 }

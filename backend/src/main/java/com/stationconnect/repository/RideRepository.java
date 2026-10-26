@@ -48,4 +48,16 @@ public interface RideRepository extends JpaRepository<Ride, Long> {
     int acceptRequestedRide(
             @Param("rideId") Long rideId,
             @Param("driverId") Long driverId);
+
+            @Modifying
+    @Query("""
+        UPDATE Ride r
+        SET r.status = 'CANCELLED'
+        WHERE r.id = :rideId
+        AND r.requestedBy = :riderId
+        AND r.status IN ('REQUESTED', 'ACCEPTED', 'ARRIVED')
+        """)
+    int cancelRideByRider(
+        @Param("rideId") Long rideId,
+        @Param("riderId") Long riderId);
 }

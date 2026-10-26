@@ -75,4 +75,11 @@ public class RiderController {
         return riderRideService.getMyRide(
                 principal.getName(), rideId);
     }
+    @PatchMapping("/rides/{rideId}/cancel")
+    public Ride cancelMyRide(
+            Principal principal,
+            @PathVariable Long rideId) {
+        return riderRideService.cancelMyRide(
+                principal.getName(), rideId);
+}
 }

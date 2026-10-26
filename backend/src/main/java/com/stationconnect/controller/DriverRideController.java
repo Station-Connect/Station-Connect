@@ -66,4 +66,11 @@ public class DriverRideController {
             @PathVariable Long rideId) {
         return driverRideService.completeRide(principal.getName(), rideId);
     }
+    @GetMapping("/completed")
+     public List<Ride> getCompletedRides(Principal principal) {
+         return driverRideService.getMyRides(principal.getName())
+                 .stream()
+                 .filter(ride -> "COMPLETED".equals(ride.getStatus()))
+                 .toList();
+    }
 }

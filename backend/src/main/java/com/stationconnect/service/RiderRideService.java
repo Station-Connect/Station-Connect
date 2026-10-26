@@ -48,4 +48,42 @@ public class RiderRideService {
                         HttpStatus.NOT_FOUND,
                         "Ride not found for this rider"));
     }
+    @Transactional
+public Ride cancelMyRide(String email, Long rideId) {
+    String normalizedEmail = email == null
+            ? ""
+            : email.trim().toLowerCase(Locale.ROOT);
+
+    var rider = userRepository.findByEmail(normalizedEmail)
+            .orElseThrow(() -> new ApiException(
+                    HttpStatus.NOT_FOUND, "User not found"));
+
+    if (rider.getRole() != Role.RIDER) {
+        throw new ApiException(
+                HttpStatus.FORBIDDEN,
+                "Only riders can cancel rider rides");
+    }
+
+    int updated = rideRepository.cancelRideByRider(
+            rideId, rider.getId());
+
+    if (updated == 0) {
+        Ride ride = rideRepository.findByIdAndRequestedBy(
+                        rideId, rider.getId())
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND,
+                        "Ride not found for this rider"));
+
+        throw new ApiException(
+                HttpStatus.CONFLICT,
+                "Ride cannot be cancelled in its current status: "
+                        + ride.getStatus());
+    }
+
+    return rideRepository.findByIdAndRequestedBy(
+                    rideId, rider.getId())
+            .orElseThrow(() -> new ApiException(
+                    HttpStatus.NOT_FOUND,
+                    "Ride not found for this rider"));
+}
 }
