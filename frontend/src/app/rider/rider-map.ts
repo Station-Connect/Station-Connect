@@ -269,6 +269,7 @@ interface DriverTrackingResponse {
               <strong>Estimated fare:</strong>
               ₹{{ result.ride.estimatedFare | number:'1.2-2' }}
             </p>
+            
 
             <p>
               <strong>Nearby drivers found:</strong>
@@ -332,6 +333,30 @@ interface DriverTrackingResponse {
               <strong>Estimated fare:</strong>
               ₹{{ ride.estimatedFare | number:'1.2-2' }}
             </p>
+            @if (
+  ['REQUESTED', 'ACCEPTED', 'ARRIVED'].includes(ride.status)
+) {
+  <button
+    type="button"
+    class="cancel-button"
+    [disabled]="cancellingRide()"
+    (click)="cancelRide(ride.id)"
+  >
+    {{ cancellingRide() ? 'Cancelling...' : 'Cancel Ride' }}
+  </button>
+}
+
+@if (cancellationMessage()) {
+  <p class="success" role="status">
+    {{ cancellationMessage() }}
+  </p>
+}
+
+@if (cancellationError()) {
+  <p class="error" role="alert">
+    {{ cancellationError() }}
+  </p>
+}
 
             @if (ride.status === 'COMPLETED') {
               <div class="final-fare-card">
@@ -345,6 +370,32 @@ interface DriverTrackingResponse {
                       | number:'1.2-2'
                   }}
                 </p>
+
+                  @if (
+                ['REQUESTED', 'ACCEPTED', 'ARRIVED'].includes(ride.status)
+              ) {
+                <button
+                  type="button"
+                  class="cancel-button"
+                  [disabled]="cancellingRide()"
+                  (click)="cancelRide(ride.id)"
+                >
+                  {{ cancellingRide() ? 'Cancelling...' : 'Cancel Ride' }}
+                </button>
+              }
+
+              @if (cancellationMessage()) {
+                <p class="success" role="status">
+                  {{ cancellationMessage() }}
+                </p>
+              }
+
+              @if (cancellationError()) {
+                <p class="error" role="alert">
+                  {{ cancellationError() }}
+                </p>
+              } 
+                   
 
                 @if (ride.completedAt) {
                   <p class="completed-time">
@@ -656,6 +707,25 @@ interface DriverTrackingResponse {
       background: #eff6ff;
       overflow-wrap: anywhere;
     }
+    .cancel-button {
+  margin-top: 12px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  background: #b42318;
+  color: white;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.cancel-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.success {
+  color: #166534;
+}
   `]
 })
 export class RiderMap implements AfterViewInit, OnDestroy {
@@ -712,6 +782,10 @@ export class RiderMap implements AfterViewInit, OnDestroy {
   readonly trackingError = signal<string | null>(null);
   readonly trackingMessage = signal('');
   readonly trackingStopped = signal(false);
+
+  readonly cancellingRide = signal(false);
+  readonly cancellationMessage = signal('');
+  readonly cancellationError = signal('');
 
   constructor() {
     this.searchSubscription = this.searchSubject.pipe(
@@ -1152,4 +1226,38 @@ export class RiderMap implements AfterViewInit, OnDestroy {
     this.searchSubject.complete();
     this.map?.remove();
   }
+
+  cancelRide(rideId: number): void {
+  if (this.cancellingRide()) {
+    return;
+  }
+
+  this.cancellingRide.set(true);
+  this.cancellationMessage.set('');
+  this.cancellationError.set('');
+
+  this.http.patch<Ride>(
+    `${environment.apiUrl}/rider/rides/${rideId}/cancel`,
+    {},
+  ).subscribe({
+    next: (ride) => {
+      this.latestRide.set(ride);
+      this.cancellationMessage.set('Ride cancelled successfully.');
+      this.cancellingRide.set(false);
+      this.stopTracking();
+    },
+    error: (error: HttpErrorResponse) => {
+      this.cancellationError.set(
+        error.status === 409
+          ? 'This ride can no longer be cancelled. Refresh the trip status.'
+          : error.status === 404
+            ? 'Ride not found for your account.'
+            : error.status === 401
+              ? 'Your session has expired. Please log in again.'
+              : 'Unable to cancel the ride. Please try again.',
+      );
+      this.cancellingRide.set(false);
+    },
+  });
+}
 }
