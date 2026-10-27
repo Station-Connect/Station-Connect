@@ -8,6 +8,7 @@ import com.stationconnect.repository.RideRepository;
 import com.stationconnect.repository.UserRepository;
 
 import java.util.Locale;
+import java.util.List;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -86,4 +87,23 @@ public Ride cancelMyRide(String email, Long rideId) {
                     HttpStatus.NOT_FOUND,
                     "Ride not found for this rider"));
 }
+@Transactional(readOnly = true)
+public List<Ride> getMyRideHistory(String email) {
+    String normalizedEmail = email == null
+            ? ""
+            : email.trim().toLowerCase(Locale.ROOT);
+
+    var rider = userRepository.findByEmail(normalizedEmail)
+            .orElseThrow(() -> new ApiException(
+                    HttpStatus.NOT_FOUND, "User not found"));
+
+    if (rider.getRole() != Role.RIDER) {
+        throw new ApiException(
+                HttpStatus.FORBIDDEN,
+                "Only riders can access ride history");
+    }
+
+    return rideRepository.findByRequestedByOrderByRequestedAtDesc(
+            rider.getId());
+} 
 }

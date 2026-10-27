@@ -63,4 +63,9 @@ export class RideRequestService {
       `${this.url}/${rideId}`
     );
   }
+  getMyRides(): Observable<Ride[]> {
+  return this.http.get<Ride[]>(
+    `${environment.apiUrl}/rider/rides`,
+  );
+}
 }

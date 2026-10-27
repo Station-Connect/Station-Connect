@@ -82,4 +82,8 @@ public class RiderController {
         return riderRideService.cancelMyRide(
                 principal.getName(), rideId);
 }
+@GetMapping("/rides")
+public java.util.List<Ride> getMyRideHistory(Principal principal) {
+    return riderRideService.getMyRideHistory(principal.getName());
+}
 }

@@ -486,6 +486,59 @@ interface DriverTrackingResponse {
         }
       </section>
     </section>
+    <section class="ride-history">
+  <div class="history-heading">
+    <h2>My Trips</h2>
+    <button
+      type="button"
+      [disabled]="historyLoading()"
+      (click)="loadRideHistory()"
+    >
+      {{ historyLoading() ? 'Loading...' : 'Refresh Trips' }}
+    </button>
+  </div>
+
+  @if (historyError()) {
+    <p class="error" role="alert">{{ historyError() }}</p>
+  } @else if (historyLoading() && rideHistory().length === 0) {
+    <p>Loading your trips...</p>
+  } @else if (rideHistory().length === 0) {
+    <p>No previous trips found.</p>
+  } @else {
+    <div class="history-list">
+      @for (ride of rideHistory(); track ride.id) {
+        <article class="history-card">
+          <h3>Ride #{{ ride.id }}</h3>
+          <p><strong>Pickup:</strong> {{ ride.pickupAddress }}</p>
+          <p><strong>Drop-off:</strong> {{ ride.dropAddress }}</p>
+          <p><strong>Status:</strong> {{ ride.status }}</p>
+          <p>
+            <strong>Estimated fare:</strong>
+            ₹{{ ride.estimatedFare | number:'1.2-2' }}
+          </p>
+
+          @if (ride.status === 'COMPLETED') {
+            <p>
+              <strong>Final fare:</strong>
+              ₹{{ (ride.finalFare ?? ride.estimatedFare) | number:'1.2-2' }}
+            </p>
+            @if (ride.completedAt) {
+              <p>
+                <strong>Completed:</strong>
+                {{ ride.completedAt | date:'medium' }}
+              </p>
+            }
+          }
+
+          <p>
+            <strong>Requested:</strong>
+            {{ ride.requestedAt | date:'medium' }}
+          </p>
+        </article>
+      }
+    </div>
+  }
+</section>
   `,
   styles: [`
     .map-section {
@@ -726,6 +779,33 @@ interface DriverTrackingResponse {
 .success {
   color: #166534;
 }
+.ride-history {
+  margin-top: 24px;
+}
+
+.history-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.history-list {
+  display: grid;
+  gap: 12px;
+}
+
+.history-card {
+  padding: 16px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  background: white;
+  overflow-wrap: anywhere;
+}
+
+.history-card h3 {
+  margin-top: 0;
+}
   `]
 })
 export class RiderMap implements AfterViewInit, OnDestroy {
@@ -787,6 +867,10 @@ export class RiderMap implements AfterViewInit, OnDestroy {
   readonly cancellationMessage = signal('');
   readonly cancellationError = signal('');
 
+  readonly rideHistory = signal<Ride[]>([]);
+readonly historyLoading = signal(false);
+readonly historyError = signal('');
+
   constructor() {
     this.searchSubscription = this.searchSubject.pipe(
       debounceTime(1100),
@@ -815,6 +899,25 @@ export class RiderMap implements AfterViewInit, OnDestroy {
       this.searching.set(false);
     });
   }
+  loadRideHistory(): void {
+  this.historyLoading.set(true);
+  this.historyError.set('');
+
+  this.rideRequestService.getMyRides().subscribe({
+    next: (rides) => {
+      this.rideHistory.set(rides);
+      this.historyLoading.set(false);
+    },
+    error: (error: HttpErrorResponse) => {
+      this.historyError.set(
+        error.status === 401
+          ? 'Your session has expired. Please log in again.'
+          : 'Unable to load your ride history. Please try again.',
+      );
+      this.historyLoading.set(false);
+    },
+  });
+}
 
   ngAfterViewInit(): void {
     this.map = L.map(this.mapContainer.nativeElement)
@@ -834,6 +937,7 @@ export class RiderMap implements AfterViewInit, OnDestroy {
         this.selectLocation(event.latlng);
       }
     );
+    this.loadRideHistory();
   }
 
   onSearchChange(query: string): void {

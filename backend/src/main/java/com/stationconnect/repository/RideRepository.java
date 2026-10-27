@@ -20,6 +20,8 @@ public interface RideRepository extends JpaRepository<Ride, Long> {
 
     Optional<Ride> findByIdAndDriverId(Long id, Long driverId);
 
+    List<Ride> findByRequestedByOrderByRequestedAtDesc(Long requestedBy);
+
     /**
      * Finds rides assigned to a driver that have one of the supplied statuses.
      * Used to broadcast driver location updates only for active rides.
