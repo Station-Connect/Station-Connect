@@ -3,6 +3,12 @@ import { environment } from '../../../environments/environment';
 import { DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 
+import {
+  DriverRideNotificationService,
+  RideRequestNotification,
+} from '../driver-ride-notification.service';
+import { effect } from '@angular/core';
+
 interface DriverProfile {
   userId: number;
   vehicleType: string;
@@ -133,6 +139,27 @@ interface DriverLocationResponse {
         <section class="ride-section">
           <div class="section-heading">
             <h2>Available Rides</h2>
+            <p>
+  <strong>Ride notifications:</strong>
+  {{ notificationConnectionStatus() }}
+</p>
+
+@if (incomingRequests().length > 0) {
+  <section class="notification-list">
+    <h3>New Ride Requests</h3>
+
+    @for (request of incomingRequests(); track request.rideId) {
+      <article class="ride-card">
+        <h4>Ride #{{ request.rideId }}</h4>
+        <p><strong>Pickup:</strong> {{ request.pickupAddress }}</p>
+        <p><strong>Drop-off:</strong> {{ request.dropAddress }}</p>
+        <p><strong>Type:</strong> {{ request.rideType }}</p>
+        <p><strong>Estimated fare:</strong> ₹{{ request.estimatedFare }}</p>
+        <p><strong>Distance from pickup:</strong> {{ request.distanceKm }} km</p>
+      </article>
+    }
+  </section>
+}
             <button
               type="button"
               [disabled]="ridesLoading() || rideActionId() !== null"
@@ -384,6 +411,9 @@ interface DriverLocationResponse {
 })
 export class DriverDashboard implements OnInit {
   private readonly http = inject(HttpClient);
+  private readonly rideNotifications =
+  inject(DriverRideNotificationService);
+  private lastNotificationRideId: number | null = null;
 
   readonly profile = signal<DriverProfile | null>(null);
   readonly loading = signal(true);
@@ -409,6 +439,30 @@ export class DriverDashboard implements OnInit {
   readonly rideActionId = signal<number | null>(null);
   readonly completedRides = signal<Ride[]>([]);
   readonly completedRidesError = signal('');
+  readonly incomingRequests = this.rideNotifications.incomingRequests;
+  readonly notificationConnectionStatus =
+  this.rideNotifications.connectionStatus;
+
+  private handleIncomingNotification(
+  notification: RideRequestNotification,
+): void {
+  this.refreshRides();
+}
+private readonly notificationEffect = effect(() => {
+  const requests = this.incomingRequests();
+  const newestRide = requests[0];
+
+  if (
+    newestRide &&
+    newestRide.rideId !== this.lastNotificationRideId
+  ) {
+    this.lastNotificationRideId = newestRide.rideId;
+
+    if (this.profile()?.online) {
+      this.refreshRides();
+    }
+  }
+});
 
   ngOnInit(): void {
     this.loadProfile();
@@ -441,10 +495,12 @@ export class DriverDashboard implements OnInit {
         this.updating.set(false);
 
         if (updatedProfile.online) {
-          this.refreshRides();
-        } else {
-          this.availableRides.set([]);
-        }
+  this.rideNotifications.connect();
+  this.refreshRides();
+} else {
+  this.rideNotifications.disconnect();
+  this.availableRides.set([]);
+}
       },
       error: (err: HttpErrorResponse) => {
         this.statusError.set(
@@ -650,6 +706,10 @@ export class DriverDashboard implements OnInit {
       next: (profile) => {
         this.profile.set(profile);
         this.loading.set(false);
+
+        if (profile.online && profile.verificationStatus === 'APPROVED') {
+       this.rideNotifications.connect();
+      }
 
         if (profile.online && profile.verificationStatus === 'APPROVED') {
           this.refreshRides();
